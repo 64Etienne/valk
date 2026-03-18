@@ -128,18 +128,22 @@ export function GuidedCapture() {
     }
   }, [extraction, finishCapture]);
 
-  // ── Main RAF capture loop ───────────────────────────────────────────
+  // ── Main RAF loop (countdown detection + capture phases) ────────────
   useEffect(() => {
-    if (!CAPTURE_PHASES.has(phase)) return;
+    const isActivePhase = CAPTURE_PHASES.has(phase) || phase === "countdown";
+    if (!isActivePhase) return;
 
     const loop = (timestamp: number) => {
       const currentPhase = phaseRef.current;
 
-      // Bail if we left capture phases between frames
-      if (!CAPTURE_PHASES.has(currentPhase)) return;
+      // Bail if we left active phases between frames
+      if (!CAPTURE_PHASES.has(currentPhase) && currentPhase !== "countdown")
+        return;
 
-      // Wait for camera + model to be ready
-      if (!camera.videoRef.current || !mediapipe.isLoaded) {
+      const video = camera.videoRef.current;
+
+      // Wait for camera + model to be ready (readyState ≥ 2 = has frame data)
+      if (!video || video.readyState < 2 || !mediapipe.isLoaded) {
         rafRef.current = requestAnimationFrame(loop);
         return;
       }
@@ -152,15 +156,14 @@ export function GuidedCapture() {
       lastTimestampRef.current = timestamp;
 
       // ── Detect face landmarks ──
-      const result = mediapipe.detect(camera.videoRef.current, timestamp);
+      const result = mediapipe.detect(video, timestamp);
       const landmarks = result?.faceLandmarks?.[0] as
         | LandmarkPoint[]
         | undefined;
 
       if (!landmarks || landmarks.length < 468) {
         setFaceDetected(false);
-        setFaceLost(true);
-        // Keep looping -- face may reappear
+        if (currentPhase !== "countdown") setFaceLost(true);
         rafRef.current = requestAnimationFrame(loop);
         return;
       }
@@ -168,7 +171,12 @@ export function GuidedCapture() {
       setFaceDetected(true);
       setFaceLost(false);
 
-      const video = camera.videoRef.current;
+      // During countdown, face detection is all we need
+      if (currentPhase === "countdown") {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
       const w = video.videoWidth || 640;
       const h = video.videoHeight || 480;
 
@@ -193,7 +201,6 @@ export function GuidedCapture() {
         PHASE_DURATIONS[currentPhase as keyof typeof PHASE_DURATIONS];
       if (duration && elapsed >= duration) {
         advancePhase();
-        // advancePhase sets a new phase → this effect re-runs
         return;
       }
 
