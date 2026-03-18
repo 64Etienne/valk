@@ -9,6 +9,7 @@ import { useAnalysis } from "@/lib/hooks/useAnalysis";
 import { CameraPermissionGate } from "./CameraPermissionGate";
 import { CameraView } from "./CameraView";
 import { ContextForm } from "./ContextForm";
+import { CaptureInstructions } from "./CaptureInstructions";
 import { CaptureCountdown } from "./CaptureCountdown";
 import { PhaseIndicator } from "./PhaseIndicator";
 import { FixationDot } from "./FixationDot";
@@ -69,6 +70,10 @@ export function GuidedCapture() {
   // Handle context form submission
   const handleContextSubmit = useCallback((ctx: UserContext) => {
     setContext(ctx);
+    setPhase("instructions");
+  }, []);
+
+  const handleInstructionsReady = useCallback(() => {
     setPhase("countdown");
   }, []);
 
@@ -253,6 +258,11 @@ export function GuidedCapture() {
             <div className="absolute inset-0 bg-zinc-950/90 z-20 flex items-center justify-center overflow-y-auto">
               <ContextForm onSubmit={handleContextSubmit} />
             </div>
+          )}
+
+          {/* Pre-capture instructions */}
+          {phase === "instructions" && (
+            <CaptureInstructions onReady={handleInstructionsReady} />
           )}
 
           {/* Countdown overlay (waits for face detection) */}

@@ -2,6 +2,7 @@
 export type CapturePhase =
   | "idle"
   | "context_form"
+  | "instructions"
   | "countdown"
   | "phase_1"
   | "phase_2_warn"
