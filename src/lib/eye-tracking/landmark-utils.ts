@@ -76,6 +76,72 @@ export function irisCenter(landmarks: LandmarkPoint[], centerIndex: number): { x
   return { x: center.x, y: center.y };
 }
 
+// Inter-pupillary distance in pixels (468 = right iris center, 473 = left)
+export function ipdPixels(landmarks: LandmarkPoint[], imageWidth: number): number {
+  const rightCenter = landmarks[468];
+  const leftCenter = landmarks[473];
+  if (!rightCenter || !leftCenter) return 0;
+  return Math.abs(rightCenter.x - leftCenter.x) * imageWidth;
+}
+
+// Estimate pupil-to-iris ratio by sampling dark pixels within iris circle.
+// Returns ratio (0.2-0.8). pupilDiameter ≈ irisDiameter * ratio.
+export function estimatePupilRatio(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  landmarks: LandmarkPoint[],
+  irisCenterIdx: number,
+  irisEdgeIdx: number,
+  imageWidth: number,
+  imageHeight: number,
+  darknessThreshold: number = 60
+): number {
+  const center = landmarks[irisCenterIdx];
+  const edge = landmarks[irisEdgeIdx];
+  if (!center || !edge) return 0.42;
+
+  const cx = Math.round(center.x * imageWidth);
+  const cy = Math.round(center.y * imageHeight);
+  const radius = Math.round(
+    Math.sqrt(
+      ((edge.x - center.x) * imageWidth) ** 2 +
+      ((edge.y - center.y) * imageHeight) ** 2
+    )
+  );
+
+  if (radius < 3) return 0.42;
+
+  const x0 = Math.max(0, cx - radius);
+  const y0 = Math.max(0, cy - radius);
+  const size = Math.min(radius * 2, imageWidth - x0, imageHeight - y0);
+  if (size < 6) return 0.42;
+
+  let darkPixels = 0;
+  let totalPixels = 0;
+
+  try {
+    const imageData = ctx.getImageData(x0, y0, size, size);
+    const data = imageData.data;
+    const r2 = radius * radius;
+
+    for (let dy = 0; dy < size; dy += 2) {
+      for (let dx = 0; dx < size; dx += 2) {
+        const distSq = (dx - radius) ** 2 + (dy - radius) ** 2;
+        if (distSq > r2) continue;
+        totalPixels++;
+        const idx = (dy * size + dx) * 4;
+        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+        if (brightness < darknessThreshold) darkPixels++;
+      }
+    }
+  } catch {
+    return 0.42;
+  }
+
+  if (totalPixels === 0) return 0.42;
+  const ratio = Math.sqrt(darkPixels / totalPixels);
+  return Math.max(0.2, Math.min(0.8, ratio));
+}
+
 // Get polygon points for sclera region (eye contour excluding iris area)
 export function getEyeContourPoints(
   landmarks: LandmarkPoint[],

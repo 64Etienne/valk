@@ -1,9 +1,9 @@
 import { LandmarkPoint } from "./types";
 import {
   RIGHT_IRIS, LEFT_IRIS,
-  irisDiameterPx, pixelsToMm, landmarkDistance2D,
+  irisDiameterPx, ipdPixels, estimatePupilRatio,
 } from "./landmark-utils";
-import { fft, dominantFrequency } from "../utils/fft";
+import { dominantFrequency } from "../utils/fft";
 import { mean, std } from "../utils/math";
 
 interface PupilSample {
@@ -14,36 +14,86 @@ interface PupilSample {
 
 export class PupilAnalyzer {
   private samples: PupilSample[] = [];
-  private irisRefMm = 11.7;
+  private ipdRefMm = 63; // average adult inter-pupillary distance
+  private canvas: OffscreenCanvas | HTMLCanvasElement | null = null;
+  private ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
+  private lastLeftRatio = 0.42;
+  private lastRightRatio = 0.42;
 
   reset(): void {
     this.samples = [];
+    this.lastLeftRatio = 0.42;
+    this.lastRightRatio = 0.42;
+  }
+
+  private ensureCanvas(w: number, h: number) {
+    if (this.ctx) return;
+    if (typeof OffscreenCanvas !== "undefined") {
+      this.canvas = new OffscreenCanvas(w, h);
+      this.ctx = this.canvas.getContext("2d") as OffscreenCanvasRenderingContext2D;
+    } else {
+      this.canvas = document.createElement("canvas");
+      this.canvas.width = w;
+      this.canvas.height = h;
+      this.ctx = this.canvas.getContext("2d");
+    }
   }
 
   // Process a frame and return current pupil diameters
-  procesFrame(
+  processFrame(
     landmarks: LandmarkPoint[],
     timeMs: number,
     imageWidth: number,
-    imageHeight: number
+    imageHeight: number,
+    videoElement?: HTMLVideoElement
   ): { leftMm: number; rightMm: number } {
+    // Scale factor: mm per pixel from inter-pupillary distance
+    const ipd = ipdPixels(landmarks, imageWidth);
+    const scale = ipd > 0 ? this.ipdRefMm / ipd : 0;
+
+    // Iris diameters in pixels
     const rightIrisPx = irisDiameterPx(landmarks, RIGHT_IRIS, imageWidth, imageHeight);
     const leftIrisPx = irisDiameterPx(landmarks, LEFT_IRIS, imageWidth, imageHeight);
 
-    // Pupil diameter approximated as ~40% of iris diameter (average)
-    // More precisely: we measure the dark center area, but MediaPipe gives iris landmarks
-    // We use the distance between iris center and nearest edge as radius estimate
-    const rightCenter = landmarks[468];
-    const leftCenter = landmarks[473];
+    // Pixel-based pupil ratio estimation (every 3rd frame for performance)
+    if (videoElement && this.samples.length % 3 === 0) {
+      this.ensureCanvas(imageWidth, imageHeight);
+      if (this.ctx && this.canvas) {
+        if (this.canvas instanceof HTMLCanvasElement) {
+          this.canvas.width = imageWidth;
+          this.canvas.height = imageHeight;
+        } else {
+          (this.canvas as OffscreenCanvas).width = imageWidth;
+          (this.canvas as OffscreenCanvas).height = imageHeight;
+        }
+        this.ctx.drawImage(videoElement, 0, 0, imageWidth, imageHeight);
 
-    // Use iris diameter directly as the measurable quantity
-    // The ratio vs reference gives us absolute size
-    const leftMm = pixelsToMm(leftIrisPx, leftIrisPx, this.irisRefMm);
-    const rightMm = pixelsToMm(rightIrisPx, rightIrisPx, this.irisRefMm);
+        this.lastRightRatio = estimatePupilRatio(
+          this.ctx, landmarks, 468, 469, imageWidth, imageHeight
+        );
+        this.lastLeftRatio = estimatePupilRatio(
+          this.ctx, landmarks, 473, 474, imageWidth, imageHeight
+        );
+      }
+    }
 
-    // For pupil, estimate ~42% of iris (Wyatt 1995)
-    const leftPupilMm = leftMm * 0.42;
-    const rightPupilMm = rightMm * 0.42;
+    // Pupil diameter = iris diameter in pixels * pupil ratio * scale to mm
+    let leftPupilMm: number;
+    let rightPupilMm: number;
+
+    if (scale > 0) {
+      leftPupilMm = leftIrisPx * this.lastLeftRatio * scale;
+      rightPupilMm = rightIrisPx * this.lastRightRatio * scale;
+    } else {
+      // Fallback: use iris reference (11.7mm) with pixel ratio
+      leftPupilMm = 11.7 * this.lastLeftRatio;
+      rightPupilMm = 11.7 * this.lastRightRatio;
+    }
+
+    // Clamp to physiological range (1.5-9mm)
+    const clamp = (v: number) => Math.max(1.5, Math.min(9, v));
+    leftPupilMm = clamp(leftPupilMm);
+    rightPupilMm = clamp(rightPupilMm);
 
     this.samples.push({
       timeMs,
@@ -83,7 +133,6 @@ export class PupilAnalyzer {
     redilationT50Ms: number;
     timeSeries: Array<{ timeMs: number; diameterMm: number }>;
   } {
-    // Get samples around flash
     const preFlash = this.samples.filter((s) => s.timeMs < flashStartMs && s.timeMs > flashStartMs - 2000);
     const postFlash = this.samples.filter((s) => s.timeMs >= flashStartMs);
 
@@ -103,7 +152,6 @@ export class PupilAnalyzer {
       diam: (s.leftDiameterMm + s.rightDiameterMm) / 2,
     }));
 
-    // Find minimum diameter (max constriction)
     let minDiam = baselineDiam;
     let minTime = 0;
     for (const s of avgSeries) {
@@ -113,7 +161,6 @@ export class PupilAnalyzer {
       }
     }
 
-    // Constriction latency: time to reach 10% of max constriction
     const threshold10 = baselineDiam - (baselineDiam - minDiam) * 0.1;
     const latencySample = avgSeries.find((s) => s.diam <= threshold10);
     const latency = latencySample ? latencySample.timeMs : 250;
@@ -121,7 +168,6 @@ export class PupilAnalyzer {
     const amplitude = baselineDiam - minDiam;
     const velocity = minTime > 0 ? (amplitude / minTime) * 1000 : 0;
 
-    // T50: time to recover 50% of constriction
     const halfRecovery = minDiam + amplitude * 0.5;
     const recoverySamples = avgSeries.filter((s) => s.timeMs > minTime);
     const t50Sample = recoverySamples.find((s) => s.diam >= halfRecovery);
@@ -136,7 +182,6 @@ export class PupilAnalyzer {
     };
   }
 
-  // Hippus analysis via FFT
   computeHippus(sampleRateHz: number = 30): { pupilUnrestIndex: number; dominantFrequencyHz: number } {
     if (this.samples.length < 16) {
       return { pupilUnrestIndex: 0, dominantFrequencyHz: 0 };
@@ -146,9 +191,8 @@ export class PupilAnalyzer {
     const m = mean(signal);
     const detrended = signal.map((v) => v - m);
 
-    const { frequency, magnitude } = dominantFrequency(detrended, sampleRateHz, 0.3, 0.8);
+    const { frequency } = dominantFrequency(detrended, sampleRateHz, 0.3, 0.8);
 
-    // Pupil unrest index = std of diameter / mean diameter
     const pui = std(signal) / (m || 1);
 
     return {

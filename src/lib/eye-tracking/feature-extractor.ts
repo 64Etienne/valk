@@ -48,8 +48,8 @@ export class FeatureExtractor {
   ): { faceDetected: boolean; isBlinking: boolean } {
     this.frameCount++;
 
-    // Pupil analysis
-    this.pupilAnalyzer.procesFrame(landmarks, timeMs, imageWidth, imageHeight);
+    // Pupil analysis (needs video for pixel-based pupil estimation)
+    this.pupilAnalyzer.processFrame(landmarks, timeMs, imageWidth, imageHeight, videoElement);
 
     // Blink detection
     const { isBlinking } = this.blinkDetector.processFrame(landmarks, timeMs);
