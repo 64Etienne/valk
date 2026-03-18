@@ -21,16 +21,16 @@ import type { LandmarkPoint } from "@/lib/eye-tracking/types";
 
 // Phase durations in ms
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
-  phase_1: 5000,
-  phase_2_warn: 1500,
-  phase_2_flash: 2500,
-  phase_2_dark: 3000,
-  phase_3: 8000,
+  phase_1: 8000,
+  phase_2_close: 6000,
+  phase_2_flash: 3000,
+  phase_2_dark: 5000,
+  phase_3: 12000,
 };
 
 const PHASE_ORDER: CapturePhase[] = [
   "phase_1",
-  "phase_2_warn",
+  "phase_2_close",
   "phase_2_flash",
   "phase_2_dark",
   "phase_3",
@@ -50,6 +50,7 @@ export function GuidedCapture() {
   const [faceDetected, setFaceDetected] = useState(false);
   const [faceLost, setFaceLost] = useState(false);
   const [pursuitProgress, setPursuitProgress] = useState(0);
+  const [phaseElapsed, setPhaseElapsed] = useState(0);
 
   const phaseStartRef = useRef(0);
   const captureStartRef = useRef(0);
@@ -204,8 +205,9 @@ export function GuidedCapture() {
         extraction.processPursuitFrame(landmarks, timestamp, targetX, 0.5);
       }
 
-      // ── Check phase duration → advance ──
+      // ── Track elapsed for UI (e.g., LightFlash countdown) ──
       const elapsed = timestamp - phaseStartRef.current;
+      setPhaseElapsed(elapsed);
       const duration =
         PHASE_DURATIONS[currentPhase as keyof typeof PHASE_DURATIONS];
       if (duration && elapsed >= duration) {
@@ -280,18 +282,20 @@ export function GuidedCapture() {
           {/* Phase 1 -- Fixation dot (baseline pupil + blink) */}
           {phase === "phase_1" && <FixationDot />}
 
-          {/* Phase 2 -- Pupillary light reflex (warn → flash → dark recovery) */}
-          {(phase === "phase_2_warn" ||
+          {/* Phase 2 -- Pupillary light reflex (eyes closed → flash → dark recovery) */}
+          {(phase === "phase_2_close" ||
             phase === "phase_2_flash" ||
             phase === "phase_2_dark") && (
             <LightFlash
               subPhase={
-                phase === "phase_2_warn"
-                  ? "warn"
+                phase === "phase_2_close"
+                  ? "close"
                   : phase === "phase_2_flash"
                     ? "flash"
                     : "dark"
               }
+              elapsed={phaseElapsed}
+              duration={PHASE_DURATIONS[phase] ?? 6000}
             />
           )}
 

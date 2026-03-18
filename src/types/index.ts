@@ -5,7 +5,7 @@ export type CapturePhase =
   | "instructions"
   | "countdown"
   | "phase_1"
-  | "phase_2_warn"
+  | "phase_2_close"
   | "phase_2_flash"
   | "phase_2_dark"
   | "phase_3"
