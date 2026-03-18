@@ -122,6 +122,16 @@ export class PupilAnalyzer {
     return Math.round(ratio * 100) / 100;
   }
 
+  private smooth(values: number[], window: number = 5): number[] {
+    const result: number[] = [];
+    for (let i = 0; i < values.length; i++) {
+      const start = Math.max(0, i - Math.floor(window / 2));
+      const end = Math.min(values.length, i + Math.ceil(window / 2));
+      result.push(mean(values.slice(start, end)));
+    }
+    return result;
+  }
+
   // Compute PLR metrics from flash phase samples
   computePLR(
     flashStartMs: number,
@@ -147,9 +157,13 @@ export class PupilAnalyzer {
     }
 
     const baselineDiam = mean(preFlash.map((s) => (s.leftDiameterMm + s.rightDiameterMm) / 2));
-    const avgSeries = postFlash.map((s) => ({
+
+    // Smooth diameter series to eliminate frame-to-frame noise
+    const rawDiams = postFlash.map((s) => (s.leftDiameterMm + s.rightDiameterMm) / 2);
+    const smoothed = this.smooth(rawDiams);
+    const avgSeries = postFlash.map((s, i) => ({
       timeMs: s.timeMs - flashStartMs,
-      diam: (s.leftDiameterMm + s.rightDiameterMm) / 2,
+      diam: smoothed[i],
     }));
 
     let minDiam = baselineDiam;
@@ -163,7 +177,7 @@ export class PupilAnalyzer {
 
     const threshold10 = baselineDiam - (baselineDiam - minDiam) * 0.1;
     const latencySample = avgSeries.find((s) => s.diam <= threshold10);
-    const latency = latencySample ? latencySample.timeMs : 250;
+    const latency = latencySample ? Math.max(100, latencySample.timeMs) : 250;
 
     const amplitude = baselineDiam - minDiam;
     const velocity = minTime > 0 ? (amplitude / minTime) * 1000 : 0;
