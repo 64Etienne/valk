@@ -3,12 +3,16 @@ import {
   RIGHT_EAR_POINTS, LEFT_EAR_POINTS,
   RIGHT_EYELID_TOP, RIGHT_EYELID_BOTTOM,
   LEFT_EYELID_TOP, LEFT_EYELID_BOTTOM,
-  computeEAR, landmarkDistance, pixelsToMm,
+  computeEAR, pixelsToMm,
 } from "./landmark-utils";
 import { mean } from "../utils/math";
 
+const CALIBRATION_FRAMES = 15; // first N frames used to calibrate EAR threshold
+
 export class BlinkDetector {
   private earThreshold = 0.2;
+  private calibrated = false;
+  private calibrationSamples: number[] = [];
   private earHistory: Array<{ timeMs: number; ear: number }> = [];
   private blinks: BlinkEvent[] = [];
   private inBlink = false;
@@ -27,9 +31,10 @@ export class BlinkDetector {
     this.blinkStartMs = 0;
     this.closedFrames = 0;
     this.totalFrames = 0;
+    this.calibrated = false;
+    this.calibrationSamples = [];
   }
 
-  // Process a frame and return current EAR + blink state
   processFrame(
     landmarks: LandmarkPoint[],
     timeMs: number
@@ -37,6 +42,19 @@ export class BlinkDetector {
     const rightEAR = computeEAR(landmarks, RIGHT_EAR_POINTS);
     const leftEAR = computeEAR(landmarks, LEFT_EAR_POINTS);
     const ear = (rightEAR + leftEAR) / 2;
+
+    // Adaptive calibration: use first N frames to determine open-eye baseline
+    if (!this.calibrated) {
+      this.calibrationSamples.push(ear);
+      if (this.calibrationSamples.length >= CALIBRATION_FRAMES) {
+        const openEAR = mean(this.calibrationSamples);
+        // Threshold = 75% of open-eye EAR (standard approach)
+        this.earThreshold = openEAR * 0.75;
+        // Clamp to reasonable range
+        this.earThreshold = Math.max(0.1, Math.min(0.3, this.earThreshold));
+        this.calibrated = true;
+      }
+    }
 
     this.earHistory.push({ timeMs, ear });
     this.totalFrames++;
@@ -51,10 +69,8 @@ export class BlinkDetector {
       }
     } else {
       if (this.inBlink) {
-        // Blink ended
         const duration = timeMs - this.blinkStartMs;
         if (duration > 50 && duration < 500) {
-          // Valid blink (50-500ms)
           this.blinks.push({ timestampMs: this.blinkStartMs, durationMs: duration });
         }
         this.inBlink = false;
@@ -64,7 +80,6 @@ export class BlinkDetector {
     return { ear, isBlinking };
   }
 
-  // Blinks per minute
   getBlinkRate(): number {
     if (this.earHistory.length < 2) return 0;
     const durationMs = this.earHistory[this.earHistory.length - 1].timeMs - this.earHistory[0].timeMs;
@@ -72,14 +87,11 @@ export class BlinkDetector {
     return (this.blinks.length / durationMs) * 60000;
   }
 
-  // PERCLOS: percentage of time eyes are >80% closed
-  // Standard: proportion of time EAR is below threshold
   getPERCLOS(): number {
     if (this.totalFrames === 0) return 0;
     return this.closedFrames / this.totalFrames;
   }
 
-  // Ptosis detection: measure eyelid aperture
   getEyelidAperture(
     landmarks: LandmarkPoint[],
     imageWidth: number,
@@ -92,7 +104,7 @@ export class BlinkDetector {
     const leftBottom = landmarks[LEFT_EYELID_BOTTOM];
 
     if (!rightTop || !rightBottom || !leftTop || !leftBottom) {
-      return { left: 10, right: 10 }; // default mm
+      return { left: 10, right: 10 };
     }
 
     const rightAperturePx = Math.abs(rightTop.y - rightBottom.y) * imageHeight;
@@ -108,7 +120,6 @@ export class BlinkDetector {
     return this.blinks;
   }
 
-  // Check if currently blinking (useful for invalidating flash phase)
   isCurrentlyBlinking(): boolean {
     return this.inBlink;
   }

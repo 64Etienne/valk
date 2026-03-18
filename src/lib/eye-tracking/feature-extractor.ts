@@ -17,6 +17,7 @@ export class FeatureExtractor {
   private flashStartMs = 0;
   private flashEndMs = 0;
   private lastScleraResult: { leftLAB: [number, number, number]; rightLAB: [number, number, number]; rednessIndex: number; yellownessIndex: number } | null = null;
+  private lastEyelidAperture: { left: number; right: number } = { left: 10, right: 10 };
 
   reset(): void {
     this.pupilAnalyzer.reset();
@@ -27,6 +28,7 @@ export class FeatureExtractor {
     this.flashStartMs = 0;
     this.flashEndMs = 0;
     this.lastScleraResult = null;
+    this.lastEyelidAperture = { left: 10, right: 10 };
   }
 
   setStartTime(timeMs: number): void {
@@ -51,8 +53,19 @@ export class FeatureExtractor {
     // Pupil analysis (needs video for pixel-based pupil estimation)
     this.pupilAnalyzer.processFrame(landmarks, timeMs, imageWidth, imageHeight, videoElement);
 
-    // Blink detection
+    // Blink detection (with adaptive EAR threshold)
     const { isBlinking } = this.blinkDetector.processFrame(landmarks, timeMs);
+
+    // Eyelid aperture (use avg iris as pixel reference)
+    const avgIrisPx = (
+      irisDiameterPx(landmarks, LEFT_IRIS, imageWidth, imageHeight) +
+      irisDiameterPx(landmarks, RIGHT_IRIS, imageWidth, imageHeight)
+    ) / 2;
+    if (!isBlinking && avgIrisPx > 0) {
+      this.lastEyelidAperture = this.blinkDetector.getEyelidAperture(
+        landmarks, imageWidth, imageHeight, avgIrisPx
+      );
+    }
 
     // Sclera analysis (sample periodically, not every frame -- it's expensive)
     if (videoElement && this.frameCount % 10 === 0) {
@@ -104,7 +117,10 @@ export class FeatureExtractor {
         scleralColorLAB: { left: sclera.leftLAB, right: sclera.rightLAB },
         scleralRednessIndex: sclera.rednessIndex,
         scleralYellownessIndex: sclera.yellownessIndex,
-        eyelidApertureMm: { left: 10, right: 10 }, // simplified
+        eyelidApertureMm: {
+          left: Math.round(this.lastEyelidAperture.left * 10) / 10,
+          right: Math.round(this.lastEyelidAperture.right * 10) / 10,
+        },
         blinkRate: Math.round(blinkRate * 10) / 10,
         perclos: Math.round(perclos * 1000) / 1000,
       },
