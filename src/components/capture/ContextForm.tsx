@@ -10,7 +10,7 @@ interface ContextFormProps {
 }
 
 export function ContextForm({ onSubmit }: ContextFormProps) {
-  const [hoursSleep, setHoursSleep] = useState(7);
+  const [hoursAwake, setHoursAwake] = useState(8);
   const [age, setAge] = useState(25);
   const [lighting, setLighting] = useState<"bright" | "moderate" | "dim">("moderate");
   const [substance, setSubstance] = useState("");
@@ -22,7 +22,7 @@ export function ContextForm({ onSubmit }: ContextFormProps) {
     e.preventDefault();
     onSubmit({
       timeOfDay,
-      hoursSinceLastSleep: Math.max(0, new Date().getHours() + (24 - hoursSleep)),
+      hoursSinceLastSleep: hoursAwake,
       age,
       ambientLighting: lighting,
       selfReportedSubstanceUse: substance || undefined,
@@ -48,20 +48,21 @@ export function ContextForm({ onSubmit }: ContextFormProps) {
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
             <Moon className="w-4 h-4 text-violet-400" />
-            Heures de sommeil (dernière nuit)
+            Heures d'éveil
           </label>
           <div className="flex items-center gap-3">
             <input
               type="range"
               min={0}
-              max={12}
+              max={36}
               step={0.5}
-              value={hoursSleep}
-              onChange={(e) => setHoursSleep(parseFloat(e.target.value))}
+              value={hoursAwake}
+              onChange={(e) => setHoursAwake(parseFloat(e.target.value))}
               className="flex-1 accent-violet-500"
             />
-            <span className="text-sm text-zinc-300 w-10 text-right">{hoursSleep}h</span>
+            <span className="text-sm text-zinc-300 w-10 text-right">{hoursAwake}h</span>
           </div>
+          <p className="text-xs text-zinc-500 mt-1">Depuis combien de temps êtes-vous éveillé(e) ?</p>
         </div>
 
         <div>
