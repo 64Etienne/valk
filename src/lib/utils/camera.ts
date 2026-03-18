@@ -5,12 +5,20 @@ export interface CameraConstraints {
   frameRate?: number;
 }
 
-export async function getCamera(constraints: CameraConstraints = {}): Promise<MediaStream> {
+function isMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+export async function getCamera(
+  constraints: CameraConstraints = {}
+): Promise<MediaStream> {
+  const mobile = isMobile();
   const {
-    width = 1280,
-    height = 720,
+    width = mobile ? 640 : 1280,
+    height = mobile ? 480 : 720,
     facingMode = "user",
-    frameRate = 30,
+    frameRate = mobile ? 24 : 30,
   } = constraints;
 
   try {
@@ -23,8 +31,8 @@ export async function getCamera(constraints: CameraConstraints = {}): Promise<Me
       },
       audio: false,
     });
-  } catch (err) {
-    // Fallback: less strict constraints
+  } catch {
+    // Fallback: minimal constraints
     return await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: facingMode } },
       audio: false,
@@ -36,7 +44,9 @@ export function stopCamera(stream: MediaStream | null): void {
   stream?.getTracks().forEach((track) => track.stop());
 }
 
-export function getCameraResolution(stream: MediaStream): { width: number; height: number } {
+export function getCameraResolution(
+  stream: MediaStream
+): { width: number; height: number } {
   const track = stream.getVideoTracks()[0];
   const settings = track?.getSettings();
   return { width: settings?.width ?? 0, height: settings?.height ?? 0 };
