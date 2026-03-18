@@ -20,6 +20,8 @@ function getRangeForAge(ranges: AgeAdjustedRanges, age: number): ReferenceRange 
   return ranges.senior;
 }
 
+// ── Baseline ranges ──
+
 export const PUPIL_DIAMETER: AgeAdjustedRanges = {
   young:  { normal: { min: 2.0, max: 5.0 }, unit: "mm", source: "Winn et al. 1994" },
   middle: { normal: { min: 2.0, max: 4.5 }, unit: "mm", source: "Winn et al. 1994" },
@@ -104,7 +106,48 @@ REFERENCE RANGES (age ${age}, ${lighting} lighting):
 - Scleral redness (a*): ${SCLERAL_REDNESS.normal.min}-${SCLERAL_REDNESS.normal.max} (${SCLERAL_REDNESS.source})
 - Scleral yellowness (b*): ${SCLERAL_YELLOWNESS.normal.min}-${SCLERAL_YELLOWNESS.normal.max} (${SCLERAL_YELLOWNESS.source})
 - Hippus frequency: ${HIPPUS_FREQUENCY.normal.min}-${HIPPUS_FREQUENCY.normal.max} ${HIPPUS_FREQUENCY.unit} (${HIPPUS_FREQUENCY.source})
-${lighting === "dim" ? "NOTE: Dim lighting causes larger baseline pupil diameter — adjust interpretation accordingly." : ""}
-${age >= 60 ? "NOTE: Age >60 typically shows reduced PLR amplitude and smaller baseline pupils." : ""}
+
+ALCOHOL-SPECIFIC IMPAIRMENT THRESHOLDS (peer-reviewed):
+BAC 0.015%: Pursuit gain ↓12%, open-loop acceleration ↓16% (Tyson et al. 2021, J Physiol, r²=0.96)
+BAC 0.025%: Saccade amplitude ↑27% (Tyson et al. 2021)
+BAC 0.035%: Saccade rate ↑24%, peak saccade velocity ↓21% (Tyson et al. 2021)
+BAC 0.05%: Composite drowsiness score affected, visible conjunctival redness (Cori et al. 2023)
+BAC 0.06%: Saccade velocities significantly degraded, gaze-evoked nystagmus (drift velocity 2x)
+BAC 0.08%: ALL blink parameters impaired (Cori et al. 2023), HGN 4+ clues at 88% accuracy (Stuster & Burns 1998), PLR constriction velocity ↓28% (Jolkovsky et al. 2022), pupil dilation ↑8.8% (Castro et al. 2014)
+BAC 0.10%: All oculomotor systems strongly impaired, HGN onset ≤40° (Tharp equation: BAC≈(50-onset°)/100)
+
+ALCOHOL PLR EFFECTS (Jolkovsky et al. 2022, N=119 intoxicated vs 82 controls):
+- Max pupil diameter: 4.33mm (sober) → 3.55mm (intoxicated), p<0.05
+- Constriction velocity: 2.75mm/s → 1.99mm/s (↓28%), p<0.05
+- Constriction %: 33.8% → 27.2% (↓20%), p<0.05
+- Latency: 0.23s → 0.26s (↑13%), p<0.05
+- Dilation velocity: 1.13mm/s → 0.88mm/s (↓22%), p<0.05
+
+BLINK RATE & ALCOHOL (Kim et al. 2012):
+- Sober baseline: 10.66 blinks/min
+- 2h post-consumption: 13.56 blinks/min (↑27%)
+- 12h post (hangover): 15.16 blinks/min (↑42%)
+
+SMOOTH PURSUIT GAIN DOSE-RESPONSE (Tyson et al. 2021, r²=0.96):
+- Sober baseline: 0.81±0.14
+- BAC 0.035%: ~0.71 (↓12%)
+- BAC 0.065%: ~0.63 (↓22%)
+- At BAC 0.055%: 91% of tracking loss from pursuit deficit, but 94% recovered via compensatory saccades — so HIGH saccade count during pursuit = compensation for impaired pursuit
+
+SACCADE IMPAIRMENT (Roche & King 2010, N=138 double-blind):
+- Pro-saccade latency: significantly increased (F=35.2, p<0.0001)
+- Pro-saccade velocity: significantly decreased (F=10.03, p<0.0001)
+- Light drinkers more sensitive than heavy drinkers (dose × group: F=4.35, p<0.05)
+
+MEASUREMENT RELIABILITY RANKING (consumer camera):
+1. Blink rate — trivially measurable, ±1 blink/min (HIGH reliability)
+2. PERCLOS — standard EAR-based, ±2% (HIGH reliability)
+3. Scleral redness (a*) — detectable if lighting is adequate, ±2 LAB units (MODERATE reliability)
+4. Smooth pursuit gain — Pearson correlation iris-target, ±0.1 (MODERATE reliability)
+5. Saccade count during pursuit — catch-up saccades countable (MODERATE reliability)
+6. Pupil diameter — pixel-based estimation, ±0.5mm (LOW-MODERATE reliability)
+7. PLR dynamics — often unavailable on consumer cameras due to overexposure (LOW reliability)
+${lighting === "dim" ? "\nNOTE: Dim lighting causes larger baseline pupil diameter — adjust interpretation accordingly. Scleral color measurements are unreliable in dim conditions." : ""}
+${age >= 60 ? "\nNOTE: Age >60 typically shows reduced PLR amplitude and smaller baseline pupils." : ""}
 `.trim();
 }
