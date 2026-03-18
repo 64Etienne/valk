@@ -74,6 +74,10 @@ export function GuidedCapture() {
   }, []);
 
   const handleInstructionsReady = useCallback(() => {
+    // Prevent screen from dimming during capture
+    if ("wakeLock" in navigator) {
+      navigator.wakeLock.request("screen").catch(() => {});
+    }
     setPhase("countdown");
   }, []);
 

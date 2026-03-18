@@ -19,6 +19,16 @@ ANALYSIS CATEGORIES:
 5. Ocular Health: Based on scleral yellowness (jaundice), pallor (anemia), asymmetry
 6. Emotional State: Based on pupillary reactivity patterns, baseline arousal
 
+MEASUREMENT METHOD & CONFIDENCE:
+- Pupil diameter: Estimated via pixel-darkness analysis in iris region. Precision: ±0.5mm. Relative changes (PLR) more reliable than absolute values.
+- Eyelid aperture: From MediaPipe eyelid landmarks. Precision: ±1mm. Good for asymmetry, less reliable for absolute ptosis.
+- Blink rate & PERCLOS: Eye Aspect Ratio (Soukupova & Cech 2016). Reliable if calibration succeeded.
+- Scleral color: RGB→LAB from video frame. Heavily influenced by ambient lighting and camera white balance. Relative indicator only.
+- Smooth pursuit & nystagmus: Iris position via MediaPipe landmarks. Good for lateral movement detection.
+- PLR dynamics: Based on estimated pupil changes. Relative timing (latency, T50) more reliable than absolute amplitude.
+
+IMPORTANT: This is a consumer webcam/phone camera, NOT clinical pupillometry equipment. ALL measurements have significant noise. Default to "low" or "moderate" confidence. Only use "high" when multiple independent indicators converge strongly.
+
 SCORING:
 - 0-25: Normal — measurements within expected ranges
 - 26-50: Mild concern — some measurements slightly outside normal
@@ -45,7 +55,7 @@ CAPTURE METADATA:
 - Lighting: ${payload.context.ambientLighting}
 ${payload.context.selfReportedSubstanceUse ? `- Self-reported substance: ${payload.context.selfReportedSubstanceUse}` : ""}
 
-BASELINE MEASUREMENTS (Phase 1 — 3s fixation):
+BASELINE MEASUREMENTS (Phase 1 — 5s fixation):
 - Pupil diameter: L=${payload.baseline.pupilDiameterMm.left}mm, R=${payload.baseline.pupilDiameterMm.right}mm
 - Pupil symmetry ratio: ${payload.baseline.pupilSymmetryRatio}
 - Scleral color (LAB): L=${JSON.stringify(payload.baseline.scleralColorLAB.left)}, R=${JSON.stringify(payload.baseline.scleralColorLAB.right)}
