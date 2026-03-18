@@ -18,11 +18,12 @@ import { PursuitDot } from "./PursuitDot";
 import { Spinner } from "../ui/Spinner";
 import type { CapturePhase, UserContext } from "@/types";
 import type { LandmarkPoint } from "@/lib/eye-tracking/types";
+import { computeEAR, RIGHT_EAR_POINTS, LEFT_EAR_POINTS } from "@/lib/eye-tracking/landmark-utils";
 
 // Phase durations in ms
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
   phase_1: 8000,
-  phase_2_close: 6000,
+  // phase_2_close: managed manually (waits for eyes closed + 6s)
   phase_2_flash: 3000,
   phase_2_dark: 5000,
   phase_3: 12000,
@@ -51,10 +52,12 @@ export function GuidedCapture() {
   const [faceLost, setFaceLost] = useState(false);
   const [pursuitProgress, setPursuitProgress] = useState(0);
   const [phaseElapsed, setPhaseElapsed] = useState(0);
+  const [eyesClosed, setEyesClosed] = useState(false);
 
   const phaseStartRef = useRef(0);
   const captureStartRef = useRef(0);
   const rafRef = useRef<number>(0);
+  const eyesClosedSinceRef = useRef(0);
   const lastTimestampRef = useRef(0);
   const phaseRef = useRef<CapturePhase>("idle");
 
@@ -181,8 +184,38 @@ export function GuidedCapture() {
       setFaceDetected(true);
       setFaceLost(false);
 
-      // During countdown and eyes-closed PLR, only face detection — no extraction
-      if (currentPhase === "countdown" || currentPhase === "phase_2_close") {
+      // During countdown, only face detection
+      if (currentPhase === "countdown") {
+        rafRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
+      // During phase_2_close: detect eye closure, no feature extraction
+      if (currentPhase === "phase_2_close") {
+        const rightEAR = computeEAR(landmarks, RIGHT_EAR_POINTS);
+        const leftEAR = computeEAR(landmarks, LEFT_EAR_POINTS);
+        const ear = (rightEAR + leftEAR) / 2;
+        const closed = ear < 0.15; // well below blink threshold = eyes intentionally closed
+
+        if (closed && !eyesClosedSinceRef.current) {
+          eyesClosedSinceRef.current = timestamp;
+          setEyesClosed(true);
+        } else if (!closed) {
+          eyesClosedSinceRef.current = 0;
+          setEyesClosed(false);
+        }
+
+        // Countdown from eye closure (6s dark adaptation)
+        if (eyesClosedSinceRef.current > 0) {
+          const closedDuration = timestamp - eyesClosedSinceRef.current;
+          setPhaseElapsed(closedDuration);
+          if (closedDuration >= 6000) {
+            eyesClosedSinceRef.current = 0;
+            advancePhase();
+            return;
+          }
+        }
+
         rafRef.current = requestAnimationFrame(loop);
         return;
       }
@@ -294,8 +327,8 @@ export function GuidedCapture() {
                     ? "flash"
                     : "dark"
               }
+              eyesClosed={eyesClosed}
               elapsed={phaseElapsed}
-              duration={PHASE_DURATIONS[phase] ?? 6000}
             />
           )}
 
