@@ -66,10 +66,10 @@ BASELINE MEASUREMENTS (Phase 1 — 5s fixation):
 - PERCLOS: ${(payload.baseline.perclos * 100).toFixed(1)}%
 
 LIGHT REFLEX (Phase 2 — PLR):
-- Constriction latency: ${payload.lightReflex.constrictionLatencyMs}ms
+${payload.lightReflex.constrictionAmplitudeMm === 0 ? `⚠️ PLR DATA UNAVAILABLE — screen flash overexposed the camera sensor, making pupil measurement unreliable. All PLR values below are zeroed out. DO NOT interpret PLR for this session. Base your analysis on the other indicators only.` : `- Constriction latency: ${payload.lightReflex.constrictionLatencyMs}ms
 - Constriction amplitude: ${payload.lightReflex.constrictionAmplitudeMm}mm
 - Constriction velocity: ${payload.lightReflex.constrictionVelocityMmPerSec}mm/s
-- Re-dilation T50: ${payload.lightReflex.redilationT50Ms}ms
+- Re-dilation T50: ${payload.lightReflex.redilationT50Ms}ms`}
 - Time series points: ${payload.lightReflex.pupilDiameterTimeSeries.length}
 
 PURSUIT & NYSTAGMUS (Phase 3):

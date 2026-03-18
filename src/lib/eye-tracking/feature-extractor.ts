@@ -125,10 +125,11 @@ export class FeatureExtractor {
         perclos: Math.round(perclos * 1000) / 1000,
       },
       lightReflex: {
-        constrictionLatencyMs: plr.constrictionLatencyMs,
-        constrictionAmplitudeMm: plr.constrictionAmplitudeMm,
-        constrictionVelocityMmPerSec: plr.constrictionVelocityMmPerSec,
-        redilationT50Ms: plr.redilationT50Ms,
+        // Flag PLR as unreliable when values are physiologically impossible
+        constrictionLatencyMs: plr.constrictionLatencyMs > 1000 ? 0 : plr.constrictionLatencyMs,
+        constrictionAmplitudeMm: plr.constrictionAmplitudeMm < 0.1 ? 0 : plr.constrictionAmplitudeMm,
+        constrictionVelocityMmPerSec: plr.constrictionVelocityMmPerSec < 0.1 ? 0 : plr.constrictionVelocityMmPerSec,
+        redilationT50Ms: plr.redilationT50Ms < 50 || plr.redilationT50Ms > 5000 ? 0 : plr.redilationT50Ms,
         pupilDiameterTimeSeries: plr.timeSeries,
       },
       pursuit: {
