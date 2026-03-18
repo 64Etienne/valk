@@ -21,11 +21,11 @@ import type { LandmarkPoint } from "@/lib/eye-tracking/types";
 
 // Phase durations in ms
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
-  phase_1: 3000,
-  phase_2_warn: 1000,
-  phase_2_flash: 2000,
-  phase_2_dark: 2000,
-  phase_3: 5000,
+  phase_1: 5000,
+  phase_2_warn: 1500,
+  phase_2_flash: 2500,
+  phase_2_dark: 3000,
+  phase_3: 8000,
 };
 
 const PHASE_ORDER: CapturePhase[] = [
@@ -196,7 +196,7 @@ export function GuidedCapture() {
         setPursuitProgress(progress);
 
         // Sinusoidal target: 2.5 full cycles across the screen
-        const targetX = 0.5 + 0.4 * Math.sin(progress * Math.PI * 5);
+        const targetX = 0.5 + 0.4 * Math.sin(progress * Math.PI * 6);
         extraction.processPursuitFrame(landmarks, timestamp, targetX, 0.5);
       }
 

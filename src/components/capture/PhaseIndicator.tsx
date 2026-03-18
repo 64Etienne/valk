@@ -7,9 +7,9 @@ interface PhaseIndicatorProps {
 }
 
 const PHASES = [
-  { key: "phase_1", label: "Baseline", duration: "3s" },
-  { key: "phase_2", label: "Réflexe", duration: "5s" },
-  { key: "phase_3", label: "Poursuite", duration: "5s" },
+  { key: "phase_1", label: "Baseline", duration: "5s" },
+  { key: "phase_2", label: "Réflexe", duration: "7s" },
+  { key: "phase_3", label: "Poursuite", duration: "8s" },
 ] as const;
 
 function isPhaseActive(current: CapturePhase, phaseKey: string): boolean {
