@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FaceGuideOval } from "./FaceGuideOval";
 
 interface CaptureCountdownProps {
   onComplete: () => void;
   faceDetected: boolean;
 }
 
-export function CaptureCountdown({ onComplete, faceDetected }: CaptureCountdownProps) {
+export function CaptureCountdown({
+  onComplete,
+  faceDetected,
+}: CaptureCountdownProps) {
   const [count, setCount] = useState(3);
 
   useEffect(() => {
@@ -23,18 +27,28 @@ export function CaptureCountdown({ onComplete, faceDetected }: CaptureCountdownP
   }, [count, faceDetected, onComplete]);
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-20">
-      {!faceDetected ? (
-        <div className="text-center">
-          <div className="text-6xl font-bold text-amber-400 mb-4">👀</div>
-          <p className="text-zinc-300 text-lg">Positionnez votre visage face à la caméra</p>
-        </div>
-      ) : (
-        <div className="text-center">
-          <div className="text-8xl font-bold text-violet-400 animate-pulse">{count}</div>
-          <p className="text-zinc-400 mt-4">Préparez-vous...</p>
-        </div>
-      )}
+    <div className="absolute inset-0 z-20">
+      {/* Semi-transparent overlay */}
+      <div className="absolute inset-0 bg-black/50" />
+
+      {/* Face guide oval */}
+      <FaceGuideOval detected={faceDetected} />
+
+      {/* Status text */}
+      <div className="absolute bottom-16 left-0 right-0 text-center z-30">
+        {!faceDetected ? (
+          <p className="text-amber-400 text-base font-medium">
+            Centrez votre visage dans l&apos;ovale
+          </p>
+        ) : (
+          <div>
+            <p className="text-8xl font-bold text-green-400 animate-pulse">
+              {count}
+            </p>
+            <p className="text-zinc-400 mt-2">Restez immobile...</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
