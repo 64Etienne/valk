@@ -59,6 +59,60 @@ const payloadSchema = z.object({
   }),
 });
 
+/**
+ * Extract a JSON object from Claude's response text.
+ * Handles: pure JSON, ```json code blocks (with preamble/postamble),
+ * and JSON embedded in free text.
+ */
+function extractJSON(raw: string): unknown {
+  const text = raw.trim();
+
+  // Try 1: pure JSON
+  try {
+    return JSON.parse(text);
+  } catch { /* continue */ }
+
+  // Try 2: markdown code block — extract content between fences
+  const openIdx = text.indexOf("```");
+  if (openIdx !== -1) {
+    // Skip the opening fence line (```json or ```)
+    const contentStart = text.indexOf("\n", openIdx);
+    if (contentStart !== -1) {
+      const closingIdx = text.indexOf("\n```", contentStart);
+      if (closingIdx !== -1) {
+        const inner = text.slice(contentStart + 1, closingIdx).trim();
+        try {
+          return JSON.parse(inner);
+        } catch { /* fall through to try 3 */ }
+      }
+    }
+  }
+
+  // Try 3: find outermost balanced { … }
+  const start = text.indexOf("{");
+  if (start !== -1) {
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === "\\" && inStr) { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) return JSON.parse(text.slice(start, i + 1));
+      }
+    }
+  }
+
+  throw new SyntaxError(
+    `Cannot extract JSON (length=${text.length}): ${text.slice(0, 300)}`
+  );
+}
+
 // Simple in-memory rate limiting per IP
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 10; // requests per window
@@ -97,13 +151,19 @@ export async function POST(request: NextRequest) {
     const payload = parsed.data;
     const userPrompt = buildUserPrompt(payload as any);
 
-    // Call Claude API
+    // Call Claude API (16K tokens: the structured JSON with 6 categories
+    // in French can exceed 4K tokens, causing truncation)
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 4096,
+      max_tokens: 16384,
       messages: [{ role: "user", content: userPrompt }],
       system: SYSTEM_PROMPT,
     });
+
+    // Check for truncation
+    if (message.stop_reason === "max_tokens") {
+      console.error("Claude response truncated (max_tokens reached)");
+    }
 
     // Extract text response
     const textBlock = message.content.find((b) => b.type === "text");
@@ -111,14 +171,8 @@ export async function POST(request: NextRequest) {
       throw new Error("No text response from Claude");
     }
 
-    // Parse JSON from response
-    let jsonText = textBlock.text.trim();
-    // Handle markdown code blocks
-    if (jsonText.startsWith("```")) {
-      jsonText = jsonText.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-    }
-
-    const resultData = JSON.parse(jsonText);
+    // Robustly extract JSON from Claude's response
+    const resultData = extractJSON(textBlock.text);
 
     // Validate response structure
     const validated = analysisResultSchema.safeParse(resultData);
@@ -133,7 +187,10 @@ export async function POST(request: NextRequest) {
     console.error("Analysis error:", error);
 
     if (error instanceof SyntaxError) {
-      return NextResponse.json({ error: "Erreur de parsing de la réponse IA." }, { status: 500 });
+      return NextResponse.json(
+        { error: "Erreur de parsing de la réponse IA.", detail: error.message },
+        { status: 500 }
+      );
     }
 
     // Surface Anthropic SDK errors for debugging
