@@ -181,8 +181,8 @@ export function GuidedCapture() {
       setFaceDetected(true);
       setFaceLost(false);
 
-      // During countdown, face detection is all we need
-      if (currentPhase === "countdown") {
+      // During countdown and eyes-closed PLR, only face detection — no extraction
+      if (currentPhase === "countdown" || currentPhase === "phase_2_close") {
         rafRef.current = requestAnimationFrame(loop);
         return;
       }

@@ -76,8 +76,10 @@ export class NystagmusDetector {
     const den = Math.sqrt(denT * denI);
     if (den === 0) return 1.0;
 
-    const correlation = num / den;
-    return Math.round(Math.max(0, correlation) * 100) / 100;
+    // Use absolute correlation: front camera mirrors the image, so iris
+    // moves opposite to screen target. |correlation| captures tracking quality.
+    const correlation = Math.abs(num / den);
+    return Math.round(correlation * 100) / 100;
   }
 
   // Saccades: sudden jumps in eye-normalized iris position

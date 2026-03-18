@@ -143,20 +143,23 @@ export class PupilAnalyzer {
     redilationT50Ms: number;
     timeSeries: Array<{ timeMs: number; diameterMm: number }>;
   } {
-    const preFlash = this.samples.filter((s) => s.timeMs < flashStartMs && s.timeMs > flashStartMs - 2000);
-    const postFlash = this.samples.filter((s) => s.timeMs >= flashStartMs);
+    // Use Phase 1 baseline (first 30 samples) — pre-flash samples are from
+    // eyes-closed period and are meaningless
+    const baseline = this.getBaseline(30);
+    const baselineDiam = (baseline.left + baseline.right) / 2;
 
-    if (preFlash.length === 0 || postFlash.length === 0) {
+    // Skip first 300ms of flash phase (eyes still opening after audio cue)
+    const postFlash = this.samples.filter((s) => s.timeMs >= flashStartMs + 300);
+
+    if (postFlash.length === 0 || baselineDiam === 0) {
       return {
         constrictionLatencyMs: 0,
         constrictionAmplitudeMm: 0,
         constrictionVelocityMmPerSec: 0,
         redilationT50Ms: 0,
-        timeSeries: this.getTimeSeries(flashStartMs - 1000, flashEndMs + 3000),
+        timeSeries: this.getTimeSeries(flashStartMs, flashEndMs + 5000),
       };
     }
-
-    const baselineDiam = mean(preFlash.map((s) => (s.leftDiameterMm + s.rightDiameterMm) / 2));
 
     // Smooth diameter series to eliminate frame-to-frame noise
     const rawDiams = postFlash.map((s) => (s.leftDiameterMm + s.rightDiameterMm) / 2);
