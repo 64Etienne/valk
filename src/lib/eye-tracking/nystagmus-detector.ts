@@ -1,75 +1,104 @@
 import { LandmarkPoint, PursuitFrame } from "./types";
-import { LEFT_IRIS, RIGHT_IRIS, irisCenter } from "./landmark-utils";
+import { irisCenter } from "./landmark-utils";
 import { mean, std } from "../utils/math";
+
+// Eye corner landmarks for normalization
+const RIGHT_EYE_INNER = 133;
+const RIGHT_EYE_OUTER = 33;
+const LEFT_EYE_INNER = 362;
+const LEFT_EYE_OUTER = 263;
 
 export class NystagmusDetector {
   private frames: PursuitFrame[] = [];
+  private normalizedIrisX: number[] = [];
 
   reset(): void {
     this.frames = [];
+    this.normalizedIrisX = [];
   }
 
-  // Record iris position relative to pursuit target
   processFrame(
     landmarks: LandmarkPoint[],
     timeMs: number,
     targetX: number,
     targetY: number
   ): void {
-    const leftCenter = irisCenter(landmarks, 473); // LEFT_IRIS center
-    const rightCenter = irisCenter(landmarks, 468); // RIGHT_IRIS center
-
-    // Average of both eyes
+    const leftCenter = irisCenter(landmarks, 473);
+    const rightCenter = irisCenter(landmarks, 468);
     const irisX = (leftCenter.x + rightCenter.x) / 2;
     const irisY = (leftCenter.y + rightCenter.y) / 2;
 
     this.frames.push({ timestampMs: timeMs, targetX, targetY, irisX, irisY });
+
+    // Normalize iris X to eye socket width (for saccade detection)
+    const rInner = landmarks[RIGHT_EYE_INNER];
+    const rOuter = landmarks[RIGHT_EYE_OUTER];
+    const lInner = landmarks[LEFT_EYE_INNER];
+    const lOuter = landmarks[LEFT_EYE_OUTER];
+
+    if (rInner && rOuter && lInner && lOuter) {
+      const avgEyeWidth = (
+        Math.abs(rOuter.x - rInner.x) + Math.abs(lOuter.x - lInner.x)
+      ) / 2;
+      const rMid = (rInner.x + rOuter.x) / 2;
+      const lMid = (lInner.x + lOuter.x) / 2;
+      const rNorm = avgEyeWidth > 0 ? (rightCenter.x - rMid) / avgEyeWidth : 0;
+      const lNorm = avgEyeWidth > 0 ? (leftCenter.x - lMid) / avgEyeWidth : 0;
+      this.normalizedIrisX.push((rNorm + lNorm) / 2);
+    } else {
+      this.normalizedIrisX.push(0);
+    }
   }
 
-  // Compute smooth pursuit gain ratio
-  // Gain = (eye velocity / target velocity) — 1.0 = perfect tracking
+  // Pursuit gain as Pearson correlation between target and iris movement.
+  // 1.0 = perfect tracking, 0 = no tracking.
   getSmoothPursuitGain(): number {
     if (this.frames.length < 10) return 1.0;
 
-    let totalTargetVel = 0;
-    let totalEyeVel = 0;
+    const targetSeries = this.frames.map((f) => f.targetX);
+    const irisSeries = this.frames.map((f) => f.irisX);
+    const n = targetSeries.length;
 
-    for (let i = 1; i < this.frames.length; i++) {
-      const dt = this.frames[i].timestampMs - this.frames[i - 1].timestampMs;
-      if (dt === 0) continue;
+    const meanT = mean(targetSeries);
+    const meanI = mean(irisSeries);
 
-      const targetVel = Math.abs(this.frames[i].targetX - this.frames[i - 1].targetX) / dt;
-      const eyeVel = Math.abs(this.frames[i].irisX - this.frames[i - 1].irisX) / dt;
-
-      totalTargetVel += targetVel;
-      totalEyeVel += eyeVel;
+    let num = 0;
+    let denT = 0;
+    let denI = 0;
+    for (let i = 0; i < n; i++) {
+      const dt = targetSeries[i] - meanT;
+      const di = irisSeries[i] - meanI;
+      num += dt * di;
+      denT += dt * dt;
+      denI += di * di;
     }
 
-    if (totalTargetVel === 0) return 1.0;
-    return Math.round((totalEyeVel / totalTargetVel) * 100) / 100;
+    const den = Math.sqrt(denT * denI);
+    if (den === 0) return 1.0;
+
+    const correlation = num / den;
+    return Math.round(Math.max(0, correlation) * 100) / 100;
   }
 
-  // Count saccades (sudden jumps in eye position)
-  // A saccade is detected when eye velocity exceeds a threshold
+  // Saccades: sudden jumps in eye-normalized iris position
   getSaccadeCount(): number {
-    if (this.frames.length < 3) return 0;
+    if (this.normalizedIrisX.length < 3) return 0;
 
     let saccades = 0;
-    const velocityThreshold = 0.003; // normalized units per ms
+    const velocityThreshold = 0.15;
 
-    for (let i = 1; i < this.frames.length; i++) {
-      const dt = this.frames[i].timestampMs - this.frames[i - 1].timestampMs;
-      if (dt === 0) continue;
-
-      const velocity = Math.abs(this.frames[i].irisX - this.frames[i - 1].irisX) / dt;
+    for (let i = 1; i < this.normalizedIrisX.length; i++) {
+      const velocity = Math.abs(
+        this.normalizedIrisX[i] - this.normalizedIrisX[i - 1]
+      );
       if (velocity > velocityThreshold) {
         saccades++;
-        // Skip adjacent frames to avoid counting one saccade multiple times
-        while (i + 1 < this.frames.length) {
-          const nextDt = this.frames[i + 1].timestampMs - this.frames[i].timestampMs;
-          if (nextDt === 0) { i++; continue; }
-          const nextVel = Math.abs(this.frames[i + 1].irisX - this.frames[i].irisX) / nextDt;
-          if (nextVel > velocityThreshold) { i++; } else { break; }
+        while (
+          i + 1 < this.normalizedIrisX.length &&
+          Math.abs(this.normalizedIrisX[i + 1] - this.normalizedIrisX[i]) >
+            velocityThreshold
+        ) {
+          i++;
         }
       }
     }
@@ -77,42 +106,34 @@ export class NystagmusDetector {
     return saccades;
   }
 
-  // HGN clues at 3 key positions:
-  // - Onset before max deviation (45°)
-  // - Distinct at max deviation (45°)
-  // - Smooth pursuit failure
   getNystagmusClues(): {
     onsetBeforeMaxDeviation: { left: boolean; right: boolean };
     distinctAtMaxDeviation: { left: boolean; right: boolean };
     smoothPursuitFailure: { left: boolean; right: boolean };
   } {
-    // Split frames into left-looking (target < 0.3) and right-looking (target > 0.7)
     const leftFrames = this.frames.filter((f) => f.targetX < 0.3);
     const rightFrames = this.frames.filter((f) => f.targetX > 0.7);
 
-    // Detect oscillation (nystagmus) by checking variance of eye position deviation from target
-    const leftOscillation = this.detectOscillation(leftFrames);
-    const rightOscillation = this.detectOscillation(rightFrames);
+    const leftOsc = this.detectOscillation(leftFrames);
+    const rightOsc = this.detectOscillation(rightFrames);
 
-    // Check at max deviation positions
     const leftMaxDev = this.frames.filter((f) => f.targetX < 0.15);
     const rightMaxDev = this.frames.filter((f) => f.targetX > 0.85);
 
     const leftMaxOsc = this.detectOscillation(leftMaxDev);
     const rightMaxOsc = this.detectOscillation(rightMaxDev);
 
-    // Smooth pursuit failure: gain significantly below 1.0
     const gain = this.getSmoothPursuitGain();
-    const pursuitFailure = gain < 0.7;
+    const pursuitFailure = gain < 0.5;
 
     return {
       onsetBeforeMaxDeviation: {
-        left: leftOscillation > 0.005,
-        right: rightOscillation > 0.005,
+        left: leftOsc > 0.003,
+        right: rightOsc > 0.003,
       },
       distinctAtMaxDeviation: {
-        left: leftMaxOsc > 0.008,
-        right: rightMaxOsc > 0.008,
+        left: leftMaxOsc > 0.005,
+        right: rightMaxOsc > 0.005,
       },
       smoothPursuitFailure: {
         left: pursuitFailure,
@@ -121,14 +142,16 @@ export class NystagmusDetector {
     };
   }
 
-  // Detect oscillation by measuring std of (eye - target) over time
   private detectOscillation(frames: PursuitFrame[]): number {
     if (frames.length < 5) return 0;
-    const deviations = frames.map((f) => f.irisX - f.targetX);
-    return std(deviations);
+    const positions = frames.map((f) => f.irisX);
+    const velocities = [];
+    for (let i = 1; i < positions.length; i++) {
+      velocities.push(positions[i] - positions[i - 1]);
+    }
+    return std(velocities);
   }
 
-  // Get position time series for payload
   getTimeSeries(): Array<{ timeMs: number; x: number; y: number }> {
     return this.frames.map((f) => ({
       timeMs: Math.round(f.timestampMs),
