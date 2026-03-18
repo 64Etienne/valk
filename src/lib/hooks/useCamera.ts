@@ -16,11 +16,12 @@ export function useCamera() {
       const stream = await getCamera();
       streamRef.current = stream;
 
+      const res = getCameraResolution(stream);
+      setResolution(res);
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-        const res = getCameraResolution(stream);
-        setResolution(res);
       }
 
       setIsActive(true);
@@ -35,6 +36,16 @@ export function useCamera() {
       setIsActive(false);
     }
   }, []);
+
+  // CameraView mounts only after isActive=true (behind CameraPermissionGate),
+  // so videoRef is null during start(). Attach stream once the element appears.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (isActive && video && streamRef.current && !video.srcObject) {
+      video.srcObject = streamRef.current;
+      video.play().catch(() => {});
+    }
+  }, [isActive]);
 
   const stop = useCallback(() => {
     stopCamera(streamRef.current);
