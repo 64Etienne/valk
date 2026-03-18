@@ -16,11 +16,18 @@ export function useMediaPipe() {
     setError(null);
 
     try {
-      const landmarker = await initFaceLandmarker();
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 30_000)
+      );
+      const landmarker = await Promise.race([initFaceLandmarker(), timeout]);
       landmarkerRef.current = landmarker;
       setIsLoaded(true);
     } catch (err) {
-      setError("Impossible de charger le modèle de détection faciale.");
+      const msg =
+        err instanceof Error && err.message === "timeout"
+          ? "Le modèle prend trop de temps à charger. Essayez de recharger la page."
+          : "Impossible de charger le modèle de détection faciale.";
+      setError(msg);
       console.error("MediaPipe init error:", err);
     } finally {
       setIsLoading(false);
