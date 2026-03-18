@@ -10,7 +10,7 @@ interface CaptureInstructionsProps {
 const instructions = [
   {
     icon: Sun,
-    text: "Placez-vous dans un endroit bien éclairé (lumière naturelle ou lampe de face)",
+    text: "Placez-vous dans un endroit bien éclairé et réglez la luminosité de l'écran au maximum",
     color: "text-amber-400",
   },
   {
@@ -25,12 +25,12 @@ const instructions = [
   },
   {
     icon: Smartphone,
-    text: "Tenez votre appareil à bout de bras, caméra à hauteur des yeux",
+    text: "Tenez votre appareil à 20-30 cm de votre visage, caméra à hauteur des yeux",
     color: "text-green-400",
   },
   {
     icon: Hand,
-    text: "Restez immobile pendant toute la capture (~20 secondes)",
+    text: "Restez immobile pendant toute la capture (~35 secondes)",
     color: "text-zinc-300",
   },
 ];

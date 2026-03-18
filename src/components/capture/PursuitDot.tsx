@@ -16,7 +16,7 @@ export function PursuitDot({ progress }: PursuitDotProps) {
       {/* Tracking dot */}
       <div className="absolute inset-0 z-20 pointer-events-none">
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-none"
+          className="absolute top-1/3 -translate-y-1/2 -translate-x-1/2 transition-none"
           style={{ left: `${x}%` }}
         >
           <div className="w-5 h-5 rounded-full bg-green-600 shadow-lg shadow-green-600/50" />
