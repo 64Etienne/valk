@@ -86,6 +86,7 @@ export function ipdPixels(landmarks: LandmarkPoint[], imageWidth: number): numbe
 
 // Estimate pupil-to-iris ratio by sampling dark pixels within iris circle.
 // Returns ratio (0.2-0.8). pupilDiameter ≈ irisDiameter * ratio.
+// Threshold is adaptive: 40% of median brightness in the iris region.
 export function estimatePupilRatio(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   landmarks: LandmarkPoint[],
@@ -93,7 +94,6 @@ export function estimatePupilRatio(
   irisEdgeIdx: number,
   imageWidth: number,
   imageHeight: number,
-  darknessThreshold: number = 60
 ): number {
   const center = landmarks[irisCenterIdx];
   const edge = landmarks[irisEdgeIdx];
@@ -115,8 +115,7 @@ export function estimatePupilRatio(
   const size = Math.min(radius * 2, imageWidth - x0, imageHeight - y0);
   if (size < 6) return 0.42;
 
-  let darkPixels = 0;
-  let totalPixels = 0;
+  const brightnesses: number[] = [];
 
   try {
     const imageData = ctx.getImageData(x0, y0, size, size);
@@ -127,18 +126,23 @@ export function estimatePupilRatio(
       for (let dx = 0; dx < size; dx += 2) {
         const distSq = (dx - radius) ** 2 + (dy - radius) ** 2;
         if (distSq > r2) continue;
-        totalPixels++;
         const idx = (dy * size + dx) * 4;
-        const brightness = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-        if (brightness < darknessThreshold) darkPixels++;
+        brightnesses.push((data[idx] + data[idx + 1] + data[idx + 2]) / 3);
       }
     }
   } catch {
     return 0.42;
   }
 
-  if (totalPixels === 0) return 0.42;
-  const ratio = Math.sqrt(darkPixels / totalPixels);
+  if (brightnesses.length < 10) return 0.42;
+
+  // Adaptive threshold: 40% of median brightness in iris region
+  const sorted = brightnesses.slice().sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const adaptiveThreshold = median * 0.4;
+
+  const darkPixels = brightnesses.filter((b) => b < adaptiveThreshold).length;
+  const ratio = Math.sqrt(darkPixels / brightnesses.length);
   return Math.max(0.2, Math.min(0.8, ratio));
 }
 
