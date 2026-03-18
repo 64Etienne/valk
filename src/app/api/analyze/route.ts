@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     // Call Claude API
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 4096,
       messages: [{ role: "user", content: userPrompt }],
       system: SYSTEM_PROMPT,
@@ -129,15 +129,25 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(validated.data);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Analysis error:", error);
 
     if (error instanceof SyntaxError) {
       return NextResponse.json({ error: "Erreur de parsing de la réponse IA." }, { status: 500 });
     }
 
+    // Surface Anthropic SDK errors for debugging
+    if (error && typeof error === "object" && "status" in error) {
+      const apiErr = error as { status: number; message?: string };
+      const msg = apiErr.message || "Erreur API Anthropic";
+      return NextResponse.json(
+        { error: `Anthropic ${apiErr.status}: ${msg}` },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Erreur lors de l'analyse. Veuillez réessayer." },
+      { error: error instanceof Error ? error.message : "Erreur lors de l'analyse. Veuillez réessayer." },
       { status: 500 }
     );
   }
