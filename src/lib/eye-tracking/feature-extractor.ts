@@ -89,7 +89,8 @@ export class FeatureExtractor {
   buildPayload(
     context: UserContext,
     cameraResolution: { width: number; height: number },
-    captureDurationMs: number
+    captureDurationMs: number,
+    voiceFeatures?: AnalysisPayload["voiceAnalysis"]
   ): AnalysisPayload {
     const baseline = this.pupilAnalyzer.getBaseline();
     const symmetry = this.pupilAnalyzer.getSymmetryRatio();
@@ -142,6 +143,7 @@ export class FeatureExtractor {
         pupilUnrestIndex: hippus.pupilUnrestIndex,
         dominantFrequencyHz: hippus.dominantFrequencyHz,
       },
+      voiceAnalysis: voiceFeatures,
       context: {
         timeOfDay: context.timeOfDay,
         hoursSinceLastSleep: context.hoursSinceLastSleep,

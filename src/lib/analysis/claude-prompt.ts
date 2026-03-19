@@ -21,6 +21,7 @@ ANALYSIS CATEGORIES:
    f) HGN clues — 4+ clues = 88% accuracy for BAC ≥0.08% (Stuster & Burns 1998). Onset before 45° = BAC ≈ (50-angle)/100 (Tharp equation).
    g) PLR — constriction velocity ↓28% when intoxicated (Jolkovsky 2022). BUT often unavailable with consumer cameras — only interpret if data is non-zero.
    h) Pupil diameter — ↑8.8% at BAC >0.05% in low light (Castro 2014). Unreliable as sole indicator.
+   i) Voice analysis (reading aloud) — Suffoletto et al. 2023 (Stanford, J Studies Alcohol & Drugs): 98% accuracy detecting BAC>0.08% from 1s voice segments on smartphone audio. Key indicators: ↓ speech rate, ↑ pause count/duration, ↑ spectral flatness (slurred = more noise-like), altered MFCC patterns. Normal French reading: 150-180 wpm. Pauses >250ms average suggest impairment. Spectral flatness >0.3 suggests slurred articulation.
 
 2. Fatigue: Based on PERCLOS >15% (NHTSA 1994), blink rate changes, eyelid aperture asymmetry (ptosis), hippus amplitude. Hours awake >16h is a strong confound.
 
@@ -105,6 +106,20 @@ PURSUIT & NYSTAGMUS (Phase 3 — 12s, 3 full sinusoidal cycles):
 HIPPUS:
 - Pupil unrest index: ${payload.hippus.pupilUnrestIndex}
 - Dominant frequency: ${payload.hippus.dominantFrequencyHz}Hz
+
+${payload.voiceAnalysis ? `VOICE ANALYSIS (Phase 4 — Reading French tongue twisters aloud):
+- Speech rate: ${payload.voiceAnalysis.speechRateWordsPerMin} words/min (normal French reading: 150-180 wpm)
+- Total duration: ${payload.voiceAnalysis.totalDurationMs}ms
+- Voiced duration: ${payload.voiceAnalysis.voicedDurationMs}ms
+- Pause count: ${payload.voiceAnalysis.pauseCount}
+- Total pause time: ${payload.voiceAnalysis.pauseTotalMs}ms
+- Mean pause duration: ${payload.voiceAnalysis.meanPauseDurationMs}ms (normal: <250ms)
+- Spectral centroid: ${payload.voiceAnalysis.spectralCentroidMean}Hz
+- Spectral flatness: ${payload.voiceAnalysis.spectralFlatnessMean} (0=tonal, 1=noise; slurred speech → higher flatness)
+- MFCC mean: [${payload.voiceAnalysis.mfccMean.join(", ")}]
+- MFCC std: [${payload.voiceAnalysis.mfccStd.join(", ")}]
+- SNR: ${payload.voiceAnalysis.signalToNoiseRatio}dB
+Reference: Suffoletto et al. 2023 (J Studies Alcohol & Drugs, Stanford): 98% accuracy detecting BAC>0.08% from smartphone audio via SVM on MFCCs + spectral features.` : "VOICE ANALYSIS: Not available for this session."}
 
 Respond with a JSON object matching this schema:
 {

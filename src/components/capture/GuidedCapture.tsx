@@ -15,8 +15,10 @@ import { PhaseIndicator } from "./PhaseIndicator";
 import { FixationDot } from "./FixationDot";
 import { LightFlash } from "./LightFlash";
 import { PursuitDot } from "./PursuitDot";
+import { ReadingTask } from "./ReadingTask";
 import { Spinner } from "../ui/Spinner";
 import type { CapturePhase, UserContext } from "@/types";
+import type { VoiceFeatures } from "@/lib/audio/voice-analyzer";
 import type { LandmarkPoint } from "@/lib/eye-tracking/types";
 import { computeEAR, RIGHT_EAR_POINTS, LEFT_EAR_POINTS } from "@/lib/eye-tracking/landmark-utils";
 
@@ -95,15 +97,20 @@ export function GuidedCapture() {
     setPhase("phase_1");
   }, [extraction]);
 
-  // Finish capture: extract payload, send to analysis API, navigate on success
-  const finishCapture = useCallback(async () => {
+  // After eye capture phases, transition to reading task
+  const finishCapture = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
+    setPhase("phase_4_reading");
+  }, []);
+
+  // After reading task, build payload with voice features and analyze
+  const handleReadingComplete = useCallback(async (voiceFeats: VoiceFeatures) => {
     setPhase("extracting");
 
     if (!context) return;
 
     const durationMs = performance.now() - captureStartRef.current;
-    const payload = extraction.buildPayload(context, camera.resolution, durationMs);
+    const payload = extraction.buildPayload(context, camera.resolution, durationMs, voiceFeats);
 
     setPhase("analyzing");
 
@@ -113,7 +120,6 @@ export function GuidedCapture() {
       sessionStorage.setItem("valk-payload", JSON.stringify(payload));
       router.push("/results");
     }
-    // On failure, stay on "analyzing" phase -- the error is shown via analysis.error
   }, [context, extraction, camera.resolution, analysis, router]);
 
   // Advance to the next phase, or finish if all phases are done
@@ -334,6 +340,11 @@ export function GuidedCapture() {
 
           {/* Phase 3 -- Smooth pursuit tracking */}
           {phase === "phase_3" && <PursuitDot progress={pursuitProgress} />}
+
+          {/* Phase 4 -- Reading task (voice analysis) */}
+          {phase === "phase_4_reading" && (
+            <ReadingTask onComplete={handleReadingComplete} />
+          )}
 
           {/* Face lost warning overlay */}
           {faceLost && isCapturing && (

@@ -9,6 +9,7 @@ export type CapturePhase =
   | "phase_2_flash"
   | "phase_2_dark"
   | "phase_3"
+  | "phase_4_reading"
   | "extracting"
   | "analyzing"
   | "results";
@@ -52,6 +53,19 @@ export interface AnalysisPayload {
     irisPositionTimeSeries: Array<{ timeMs: number; x: number; y: number }>;
   };
   hippus: { pupilUnrestIndex: number; dominantFrequencyHz: number };
+  voiceAnalysis?: {
+    mfccMean: number[];
+    mfccStd: number[];
+    spectralCentroidMean: number;
+    spectralFlatnessMean: number;
+    speechRateWordsPerMin: number;
+    pauseCount: number;
+    pauseTotalMs: number;
+    meanPauseDurationMs: number;
+    totalDurationMs: number;
+    voicedDurationMs: number;
+    signalToNoiseRatio: number;
+  };
   context: {
     timeOfDay: string;
     hoursSinceLastSleep: number;

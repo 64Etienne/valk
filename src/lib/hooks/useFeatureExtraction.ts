@@ -41,8 +41,8 @@ export function useFeatureExtraction() {
   );
 
   const buildPayload = useCallback(
-    (context: UserContext, resolution: { width: number; height: number }, durationMs: number): AnalysisPayload => {
-      return extractorRef.current.buildPayload(context, resolution, durationMs);
+    (context: UserContext, resolution: { width: number; height: number }, durationMs: number, voiceFeatures?: AnalysisPayload["voiceAnalysis"]): AnalysisPayload => {
+      return extractorRef.current.buildPayload(context, resolution, durationMs, voiceFeatures);
     },
     []
   );
