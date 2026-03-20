@@ -23,7 +23,7 @@ export interface VoiceFeatures {
 
 const FRAME_SIZE = 2048;
 const HOP_SIZE = 512;
-const SILENCE_THRESHOLD = 0.01;
+const SILENCE_THRESHOLD = 0.005;
 const MIN_PAUSE_MS = 150;
 
 export function analyzeVoice(
@@ -38,8 +38,9 @@ export function analyzeVoice(
   const centroids: number[] = [];
   const flatnesses: number[] = [];
   const rmsValues: number[] = [];
+  const frameOffsets: number[] = [];
 
-  // Process frames
+  // Pass 1: compute RMS for all frames
   for (let i = 0; i + FRAME_SIZE <= samples.length; i += HOP_SIZE) {
     const frame = new Float64Array(FRAME_SIZE);
     let rms = 0;
@@ -49,8 +50,25 @@ export function analyzeVoice(
     }
     rms = Math.sqrt(rms / FRAME_SIZE);
     rmsValues.push(rms);
+    frameOffsets.push(i);
+  }
 
-    if (rms < SILENCE_THRESHOLD) continue;
+  // Adaptive silence threshold: use 15th percentile * 1.5 as noise floor
+  const sortedRms = [...rmsValues].sort((a, b) => a - b);
+  const adaptiveThreshold = Math.max(
+    SILENCE_THRESHOLD,
+    sortedRms[Math.floor(sortedRms.length * 0.15)] * 1.5
+  );
+
+  // Pass 2: extract spectral features for voiced frames
+  for (let idx = 0; idx < rmsValues.length; idx++) {
+    if (rmsValues[idx] < adaptiveThreshold) continue;
+
+    const frame = new Float64Array(FRAME_SIZE);
+    const offset = frameOffsets[idx];
+    for (let j = 0; j < FRAME_SIZE; j++) {
+      frame[j] = samples[offset + j] * window[j];
+    }
 
     const powerSpectrum = computePowerSpectrum(frame, FRAME_SIZE);
     const mfccs = extractMFCCs(powerSpectrum, filters, 13);
@@ -84,7 +102,7 @@ export function analyzeVoice(
   let voicedFrames = 0;
 
   for (let i = 0; i < rmsValues.length; i++) {
-    const silent = rmsValues[i] < SILENCE_THRESHOLD;
+    const silent = rmsValues[i] < adaptiveThreshold;
     if (silent && !inPause) {
       inPause = true;
       pauseStartFrame = i;
@@ -103,11 +121,11 @@ export function analyzeVoice(
   const voicedDurationMs = voicedFrames * frameDurationMs;
 
   const speechRateWordsPerMin =
-    voicedDurationMs > 0 ? (expectedWords / voicedDurationMs) * 60000 : 0;
+    totalDurationMs > 0 ? (expectedWords / totalDurationMs) * 60000 : 0;
 
   // SNR estimate
-  const voicedRms = rmsValues.filter((r) => r >= SILENCE_THRESHOLD);
-  const silentRms = rmsValues.filter((r) => r < SILENCE_THRESHOLD);
+  const voicedRms = rmsValues.filter((r) => r >= adaptiveThreshold);
+  const silentRms = rmsValues.filter((r) => r < adaptiveThreshold);
   const meanVoiced =
     voicedRms.length > 0
       ? voicedRms.reduce((a, b) => a + b, 0) / voicedRms.length

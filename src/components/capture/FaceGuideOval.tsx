@@ -14,7 +14,7 @@ export function FaceGuideOval({ detected }: FaceGuideOvalProps) {
     <svg
       viewBox="0 0 200 280"
       className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-      style={{ width: "45vmin", height: "63vmin", maxWidth: 260, maxHeight: 364 }}
+      style={{ width: "55vmin", height: "77vmin", maxWidth: 340, maxHeight: 476 }}
     >
       <ellipse
         cx="100"

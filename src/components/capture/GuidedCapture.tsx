@@ -16,11 +16,13 @@ import { FixationDot } from "./FixationDot";
 import { LightFlash } from "./LightFlash";
 import { PursuitDot } from "./PursuitDot";
 import { ReadingTask } from "./ReadingTask";
+import { AnalyzingOverlay } from "./AnalyzingOverlay";
 import { Spinner } from "../ui/Spinner";
 import type { CapturePhase, UserContext } from "@/types";
 import type { VoiceFeatures } from "@/lib/audio/voice-analyzer";
 import type { LandmarkPoint } from "@/lib/eye-tracking/types";
 import { computeEAR, RIGHT_EAR_POINTS, LEFT_EAR_POINTS } from "@/lib/eye-tracking/landmark-utils";
+import { unlockAudio } from "@/lib/audio/audio-context";
 
 // Phase durations in ms
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
@@ -80,6 +82,8 @@ export function GuidedCapture() {
   }, []);
 
   const handleInstructionsReady = useCallback(() => {
+    // Unlock audio context on user gesture (required for iOS silent mode)
+    unlockAudio();
     // Prevent screen from dimming during capture
     if ("wakeLock" in navigator) {
       navigator.wakeLock.request("screen").catch(() => {});
@@ -362,36 +366,22 @@ export function GuidedCapture() {
 
           {/* Extracting / Analyzing overlay */}
           {(phase === "extracting" || phase === "analyzing") && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center z-30 bg-zinc-950/95">
-              <Spinner size="lg" />
-              <p className="text-zinc-300 mt-4 text-lg">
-                {phase === "extracting"
-                  ? "Extraction des données..."
-                  : "Analyse en cours..."}
-              </p>
-              {analysis.error && (
-                <div className="mt-4 text-center">
-                  <p className="text-red-400 text-sm">{analysis.error}</p>
-                  <button
-                    onClick={() => {
-                      if (context) {
-                        const durationMs =
-                          performance.now() - captureStartRef.current;
-                        const payload = extraction.buildPayload(
-                          context,
-                          camera.resolution,
-                          durationMs
-                        );
-                        analysis.retry(payload);
-                      }
-                    }}
-                    className="mt-2 text-violet-400 text-sm underline hover:text-violet-300 transition-colors"
-                  >
-                    Réessayer
-                  </button>
-                </div>
-              )}
-            </div>
+            <AnalyzingOverlay
+              phase={phase as "extracting" | "analyzing"}
+              error={analysis.error}
+              onRetry={() => {
+                if (context) {
+                  const durationMs =
+                    performance.now() - captureStartRef.current;
+                  const payload = extraction.buildPayload(
+                    context,
+                    camera.resolution,
+                    durationMs
+                  );
+                  analysis.retry(payload);
+                }
+              }}
+            />
           )}
 
           {/* MediaPipe model loading indicator (bottom-left) */}

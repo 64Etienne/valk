@@ -4,7 +4,7 @@ import {
   irisDiameterPx, ipdPixels, estimatePupilRatio,
 } from "./landmark-utils";
 import { dominantFrequency } from "../utils/fft";
-import { mean, std } from "../utils/math";
+import { mean, std, trimmedMean } from "../utils/math";
 
 interface PupilSample {
   timeMs: number;
@@ -108,9 +108,13 @@ export class PupilAnalyzer {
   getBaseline(nSamples: number = 30): { left: number; right: number } {
     const slice = this.samples.slice(0, nSamples);
     if (slice.length === 0) return { left: 3.5, right: 3.5 };
+
+    const leftValues = slice.map((s) => s.leftDiameterMm);
+    const rightValues = slice.map((s) => s.rightDiameterMm);
+
     return {
-      left: mean(slice.map((s) => s.leftDiameterMm)),
-      right: mean(slice.map((s) => s.rightDiameterMm)),
+      left: trimmedMean(leftValues),
+      right: trimmedMean(rightValues),
     };
   }
 

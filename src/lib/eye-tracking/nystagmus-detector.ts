@@ -87,7 +87,7 @@ export class NystagmusDetector {
     if (this.normalizedIrisX.length < 3) return 0;
 
     let saccades = 0;
-    const velocityThreshold = 0.15;
+    const velocityThreshold = 0.04;
 
     for (let i = 1; i < this.normalizedIrisX.length; i++) {
       const velocity = Math.abs(

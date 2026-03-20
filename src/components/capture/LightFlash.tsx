@@ -1,36 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { playBeep, vibrate } from "@/lib/audio/audio-context";
+import { CircularProgress } from "../ui/CircularProgress";
 
 interface LightFlashProps {
   subPhase: "close" | "flash" | "dark";
   eyesClosed?: boolean;
   elapsed?: number;
-  duration?: number;
-}
-
-function playBeep(frequency: number = 880, durationMs: number = 100): void {
-  try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = frequency;
-    gain.gain.value = 0.3;
-    osc.start();
-    osc.stop(ctx.currentTime + durationMs / 1000);
-    setTimeout(() => ctx.close(), durationMs + 100);
-  } catch {
-    // Audio not available
-  }
 }
 
 const CLOSE_DURATION = 6000;
+const DARK_DURATION = 5000;
 
 export function LightFlash({
   subPhase,
@@ -48,7 +29,8 @@ export function LightFlash({
     if (remaining <= 3 && remaining >= 1 && remaining !== lastBeepRef.current) {
       lastBeepRef.current = remaining;
       if (remaining === 1) {
-        playBeep(1200, 400); // final beep: longer, higher = "OPEN NOW"
+        playBeep(1200, 400, 0.8); // final beep: louder, longer, higher
+        vibrate([200, 100, 200]); // vibration pattern for "open eyes now"
       } else {
         playBeep(880, 100);
       }
@@ -61,7 +43,6 @@ export function LightFlash({
 
   if (subPhase === "close") {
     if (!eyesClosed) {
-      // Waiting for user to close eyes
       return (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-30 bg-black">
           <p className="text-amber-400 text-xl font-medium mb-4">
@@ -74,20 +55,35 @@ export function LightFlash({
       );
     }
 
-    // Eyes closed — countdown running
-    const remaining = Math.max(0, Math.ceil((CLOSE_DURATION - elapsed) / 1000));
+    // Eyes closed — countdown with circular ring
+    const remaining = Math.max(
+      0,
+      Math.ceil((CLOSE_DURATION - elapsed) / 1000)
+    );
+    const ringProgress = 1 - (elapsed % 1000) / 1000;
+
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center z-30 bg-black">
-        <p className="text-green-400 text-lg font-medium mb-4">
+        <p className="text-green-400 text-lg font-medium mb-6">
           Gardez les yeux fermés
         </p>
-        {remaining <= 3 ? (
-          <p className="text-6xl font-bold text-white animate-pulse">
-            {remaining}
-          </p>
-        ) : (
-          <p className="text-4xl font-bold text-zinc-600">{remaining}</p>
-        )}
+        <CircularProgress
+          progress={ringProgress}
+          size={100}
+          strokeWidth={3}
+          color={
+            remaining <= 3 ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.3)"
+          }
+          trackColor="rgba(255,255,255,0.1)"
+        >
+          {remaining <= 3 ? (
+            <span className="text-5xl font-bold text-white animate-pulse">
+              {remaining}
+            </span>
+          ) : (
+            <span className="text-3xl font-bold text-zinc-600">{remaining}</span>
+          )}
+        </CircularProgress>
         <p className="text-zinc-600 text-xs mt-6">
           Ouvrez les yeux au signal sonore
         </p>
@@ -105,5 +101,27 @@ export function LightFlash({
     );
   }
 
-  return <div className="absolute inset-0 z-30 bg-black" />;
+  // Dark phase — subtle circular countdown so user knows it's not frozen
+  const darkRemaining = Math.max(
+    0,
+    Math.ceil((DARK_DURATION - elapsed) / 1000)
+  );
+  const darkProgress = Math.max(0, 1 - elapsed / DARK_DURATION);
+
+  return (
+    <div className="absolute inset-0 z-30 bg-black flex flex-col items-center justify-center">
+      <CircularProgress
+        progress={darkProgress}
+        size={72}
+        strokeWidth={2}
+        color="rgba(255,255,255,0.12)"
+        trackColor="rgba(255,255,255,0.04)"
+      >
+        <span className="text-xl font-medium text-zinc-700">
+          {darkRemaining}
+        </span>
+      </CircularProgress>
+      <p className="text-zinc-700 text-xs mt-3">Mesure du réflexe...</p>
+    </div>
+  );
 }
