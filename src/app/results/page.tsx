@@ -9,6 +9,8 @@ import {
   loadPayload,
   saveResult,
 } from "@/lib/storage/session-result";
+import { buildTelemetryEvent, sendTelemetry } from "@/lib/telemetry/telemetry";
+import { computeVerdict } from "@/lib/analysis/verdict";
 import type { AnalysisPayload } from "@/types";
 
 export default function ResultsPage() {
@@ -35,9 +37,26 @@ export default function ResultsPage() {
     }
 
     setMode("streaming");
+    const streamStart = performance.now();
     stream.analyze(payload).then((finalResult) => {
       if (finalResult) {
         saveResult(finalResult, payload);
+        // Telemetry opt-in (localStorage-gated, silent on failure)
+        try {
+          if (localStorage.getItem("valk-telemetry-consent") === "1") {
+            const verdict = computeVerdict(finalResult);
+            sendTelemetry(
+              buildTelemetryEvent(
+                payload,
+                finalResult,
+                verdict.level,
+                performance.now() - streamStart
+              )
+            );
+          }
+        } catch {
+          /* localStorage unavailable — skip telemetry */
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

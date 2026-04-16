@@ -26,6 +26,11 @@ import { unlockAudio } from "@/lib/audio/audio-context";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { saveResult } from "@/lib/storage/session-result";
 import { PreflightGate } from "@/components/preflight/PreflightGate";
+import {
+  isDebugEnabled,
+  createDebugRecorder,
+  uploadDebugBundle,
+} from "@/lib/debug/debug-mode";
 
 // Phase durations in ms — shortened for "leaving the bar" UX
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
@@ -71,6 +76,12 @@ export function GuidedCapture() {
   const [phaseElapsed, setPhaseElapsed] = useState(0);
   const [eyesClosed, setEyesClosed] = useState(false);
   const [preflightPassed, setPreflightPassed] = useState(false);
+  const debugRecorderRef = useRef<ReturnType<typeof createDebugRecorder> | null>(null);
+  const sessionIdRef = useRef<string>(
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
 
   const phaseStartRef = useRef(0);
   const captureStartRef = useRef(0);
@@ -120,7 +131,7 @@ export function GuidedCapture() {
   // After reading task, save payload and navigate to /results where streaming begins.
   // Streaming is managed by /results for progressive UI (first-token ~2s vs ~90s blocking).
   const handleReadingComplete = useCallback(
-    (voiceFeats: VoiceFeatures) => {
+    async (voiceFeats: VoiceFeatures) => {
       setPhase("extracting");
       if (!context) return;
       const durationMs = performance.now() - captureStartRef.current;
@@ -130,7 +141,28 @@ export function GuidedCapture() {
         durationMs,
         voiceFeats
       );
-      // Persist payload; /results will run the stream and persist the final result.
+
+      // Debug mode: stop recorder + upload bundle (fire-and-forget)
+      if (isDebugEnabled() && debugRecorderRef.current) {
+        const video = await debugRecorderRef.current.stop();
+        uploadDebugBundle({
+          sessionId: sessionIdRef.current,
+          video,
+          landmarks: null,
+          payload,
+          result: null,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+        }).then(({ sessionId, ok }) => {
+          if (ok) console.info("[DEBUG] session uploaded:", sessionId);
+        });
+        try {
+          sessionStorage.setItem("valk-debug-session-id", sessionIdRef.current);
+        } catch {
+          /* ignore */
+        }
+      }
+
       try {
         sessionStorage.setItem("valk-payload", JSON.stringify(payload));
         sessionStorage.removeItem("valk-result");
@@ -287,6 +319,18 @@ export function GuidedCapture() {
       setPhase("context_form");
     }
   }, [camera.isActive, mediapipe.isLoaded, preflightPassed, phase]);
+
+  // ── Debug mode: start MediaRecorder when capture phase_1 begins ──
+  useEffect(() => {
+    if (!isDebugEnabled()) return;
+    if (phase === "phase_1" && !debugRecorderRef.current) {
+      const stream = camera.videoRef.current?.srcObject as MediaStream | null;
+      if (stream) {
+        debugRecorderRef.current = createDebugRecorder();
+        debugRecorderRef.current.start(stream);
+      }
+    }
+  }, [phase, camera.videoRef]);
 
   // ── Cleanup: stop camera on unmount ──
   useEffect(() => {

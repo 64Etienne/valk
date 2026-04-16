@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "../ui/Button";
 import { Clock, Moon, User, Sun, AlertTriangle } from "lucide-react";
+import { TelemetryOptIn } from "./TelemetryOptIn";
 import type { UserContext } from "@/types";
 
 interface ContextFormProps {
@@ -110,6 +111,8 @@ export function ContextForm({ onSubmit }: ContextFormProps) {
           />
         </div>
       </div>
+
+      <TelemetryOptIn />
 
       <Button type="submit" size="lg" className="w-full">
         Commencer la capture
