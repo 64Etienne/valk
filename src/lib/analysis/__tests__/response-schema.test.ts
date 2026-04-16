@@ -18,9 +18,6 @@ const validResult = {
     alcohol: validCategory,
     fatigue: validCategory,
     substances: validCategory,
-    stress: validCategory,
-    ocularHealth: validCategory,
-    emotionalState: validCategory,
   },
   dataQuality: { overallQuality: "good" as const, issues: [] },
 };

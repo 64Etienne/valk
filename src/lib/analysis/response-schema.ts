@@ -17,9 +17,6 @@ export const analysisResultSchema = z.object({
     alcohol: categoryScoreSchema,
     fatigue: categoryScoreSchema,
     substances: categoryScoreSchema,
-    stress: categoryScoreSchema,
-    ocularHealth: categoryScoreSchema,
-    emotionalState: categoryScoreSchema,
   }),
   dataQuality: z.object({
     overallQuality: z.enum(["good", "fair", "poor"]),

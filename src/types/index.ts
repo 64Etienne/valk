@@ -101,9 +101,6 @@ export interface AnalysisResult {
     alcohol: CategoryScore;
     fatigue: CategoryScore;
     substances: CategoryScore;
-    stress: CategoryScore;
-    ocularHealth: CategoryScore;
-    emotionalState: CategoryScore;
   };
   dataQuality: {
     overallQuality: "good" | "fair" | "poor";
