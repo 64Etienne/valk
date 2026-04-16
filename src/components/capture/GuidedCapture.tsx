@@ -25,6 +25,7 @@ import { computeEAR, RIGHT_EAR_POINTS, LEFT_EAR_POINTS } from "@/lib/eye-trackin
 import { unlockAudio } from "@/lib/audio/audio-context";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { saveResult } from "@/lib/storage/session-result";
+import { PreflightGate } from "@/components/preflight/PreflightGate";
 
 // Phase durations in ms — shortened for "leaving the bar" UX
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
@@ -69,6 +70,7 @@ export function GuidedCapture() {
   const [pursuitProgress, setPursuitProgress] = useState(0);
   const [phaseElapsed, setPhaseElapsed] = useState(0);
   const [eyesClosed, setEyesClosed] = useState(false);
+  const [preflightPassed, setPreflightPassed] = useState(false);
 
   const phaseStartRef = useRef(0);
   const captureStartRef = useRef(0);
@@ -272,12 +274,12 @@ export function GuidedCapture() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [phase, camera.videoRef, mediapipe, extraction, advancePhase]);
 
-  // ── Auto-transition: once camera + model ready, show context form ──
+  // ── Auto-transition: once camera + model ready AND preflight passes, show context form ──
   useEffect(() => {
-    if (camera.isActive && mediapipe.isLoaded && phase === "idle") {
+    if (camera.isActive && mediapipe.isLoaded && preflightPassed && phase === "idle") {
       setPhase("context_form");
     }
-  }, [camera.isActive, mediapipe.isLoaded, phase]);
+  }, [camera.isActive, mediapipe.isLoaded, preflightPassed, phase]);
 
   // ── Cleanup: stop camera on unmount ──
   useEffect(() => {
@@ -316,6 +318,14 @@ export function GuidedCapture() {
             <div className="absolute top-0 left-0 right-0 z-20">
               <PhaseIndicator phase={phase} />
             </div>
+          )}
+
+          {/* Preflight gate: measures FPS + resolution before capture */}
+          {camera.isActive && mediapipe.isLoaded && !preflightPassed && phase === "idle" && (
+            <PreflightGate
+              videoEl={camera.videoRef.current}
+              onReady={() => setPreflightPassed(true)}
+            />
           )}
 
           {/* Context form overlay */}
