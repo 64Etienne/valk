@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 const inter = localFont({
   src: [
@@ -41,6 +42,7 @@ export default function RootLayout({
     <html lang="fr" className="dark">
       <body className={`${inter.variable} antialiased min-h-screen`}>
         {children}
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
