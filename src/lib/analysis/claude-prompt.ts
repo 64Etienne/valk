@@ -58,6 +58,13 @@ MEASUREMENT METHOD & CONFIDENCE:
 
 IMPORTANT: This is a consumer webcam/phone camera, NOT clinical pupillometry. Weight your analysis toward the HIGH and MODERATE reliability measurements. If PLR data is zeroed out, explicitly state it was unavailable and do not penalize the subject for missing PLR data.
 
+RESPONSE LENGTH BUDGET:
+- The full JSON must fit in 8000 output tokens.
+- Each category: 3-6 observations, each under 250 characters.
+- Each category: confidenceExplanation ≤ 2 sentences, scientificBasis ≤ 2 sentences.
+- summary: 2-3 sentences maximum.
+- Prefer concise, evidence-dense prose. Cut filler words.
+
 You MUST respond with valid JSON matching the specified schema. No markdown, no explanation outside JSON.`;
 
 export function buildUserPrompt(payload: AnalysisPayload): string {

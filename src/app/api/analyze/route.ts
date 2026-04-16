@@ -4,6 +4,11 @@ import { z } from "zod";
 import { SYSTEM_PROMPT, buildUserPrompt } from "@/lib/analysis/claude-prompt";
 import { analysisResultSchema } from "@/lib/analysis/response-schema";
 
+// Vercel function runtime budget — Fluid compute on Hobby supports up to 300s.
+// Claude sonnet 4.6 with max_tokens=8192 + concision directive typically lands in 30-45s;
+// 300s leaves headroom for slow completions and p99 network variance.
+export const maxDuration = 300;
+
 const anthropic = new Anthropic();
 
 // Basic payload validation (not exhaustive — Claude handles interpretation)
@@ -164,11 +169,11 @@ export async function POST(request: NextRequest) {
     const payload = parsed.data;
     const userPrompt = buildUserPrompt(payload as any);
 
-    // Call Claude API (16K tokens: the structured JSON with 6 categories
-    // in French can exceed 4K tokens, causing truncation)
+    // max_tokens=8192 with concision directive in prompt lands responses in 30-45s
+    // while keeping 2x headroom over the 4K-token truncation incident we hit previously.
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 16384,
+      max_tokens: 8192,
       messages: [{ role: "user", content: userPrompt }],
       system: SYSTEM_PROMPT,
     });
