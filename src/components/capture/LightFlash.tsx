@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { playBeep, vibrate } from "@/lib/audio/audio-context";
+import { playBeep } from "@/lib/audio/audio-context";
+import { triggerOpenEyesSignal } from "@/lib/audio/signal";
 import { CircularProgress } from "../ui/CircularProgress";
 
 interface LightFlashProps {
@@ -20,20 +21,17 @@ export function LightFlash({
 }: LightFlashProps) {
   const lastBeepRef = useRef(-1);
 
-  // Audio countdown during eyes-closed phase
+  // Multi-channel countdown signal during eyes-closed phase
   useEffect(() => {
     if (subPhase !== "close" || !eyesClosed) return;
-
     const remaining = Math.ceil((CLOSE_DURATION - elapsed) / 1000);
-
-    if (remaining <= 3 && remaining >= 1 && remaining !== lastBeepRef.current) {
+    if (remaining <= 3 && remaining >= 2 && remaining !== lastBeepRef.current) {
       lastBeepRef.current = remaining;
-      if (remaining === 1) {
-        playBeep(1200, 400, 0.8); // final beep: louder, longer, higher
-        vibrate([200, 100, 200]); // vibration pattern for "open eyes now"
-      } else {
-        playBeep(880, 100);
-      }
+      playBeep(880, 100);
+    } else if (remaining <= 1 && lastBeepRef.current !== 1) {
+      lastBeepRef.current = 1;
+      // Beep + speech synthesis + vibration — overcomes iOS silent switch
+      triggerOpenEyesSignal();
     }
   }, [subPhase, eyesClosed, elapsed]);
 
@@ -93,9 +91,9 @@ export function LightFlash({
 
   if (subPhase === "flash") {
     return (
-      <div className="absolute inset-0 z-50 bg-white flex items-center justify-center">
-        <p className="text-zinc-400 text-sm animate-pulse">
-          Ouvrez les yeux !
+      <div className="absolute inset-0 z-50 bg-white flex items-center justify-center animate-pulse">
+        <p className="text-zinc-900 text-5xl font-bold tracking-tight">
+          OUVREZ
         </p>
       </div>
     );
