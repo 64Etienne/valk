@@ -2,6 +2,7 @@
 
 import { OverallSummary } from "./OverallSummary";
 import { CategoryCard } from "./CategoryCard";
+import { VerdictBanner } from "./VerdictBanner";
 import { DisclaimerFooter } from "./DisclaimerFooter";
 import { Button } from "../ui/Button";
 import { RotateCcw } from "lucide-react";
@@ -12,7 +13,7 @@ interface ResultsDashboardProps {
   result: AnalysisResult;
 }
 
-const CATEGORY_ORDER = ["alcohol", "fatigue", "substances", "stress", "ocularHealth", "emotionalState"] as const;
+const CATEGORY_ORDER = ["alcohol", "fatigue", "substances"] as const;
 
 export function ResultsDashboard({ result }: ResultsDashboardProps) {
   return (
@@ -26,6 +27,8 @@ export function ResultsDashboard({ result }: ResultsDashboardProps) {
           </Button>
         </Link>
       </div>
+
+      <VerdictBanner result={result} />
 
       <OverallSummary result={result} />
 
