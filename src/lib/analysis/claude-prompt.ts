@@ -126,7 +126,12 @@ ${payload.voiceAnalysis ? `VOICE ANALYSIS (Phase 4 — Reading French tongue twi
 - MFCC mean: [${payload.voiceAnalysis.mfccMean.join(", ")}]
 - MFCC std: [${payload.voiceAnalysis.mfccStd.join(", ")}]
 - SNR: ${payload.voiceAnalysis.signalToNoiseRatio}dB
-Reference: Suffoletto et al. 2023 (J Studies Alcohol & Drugs, Stanford): 98% accuracy detecting BAC>0.08% from smartphone audio via SVM on MFCCs + spectral features.` : "VOICE ANALYSIS: Not available for this session."}
+Reference: Suffoletto et al. 2023 (J Studies Alcohol & Drugs, Stanford): 98% accuracy detecting BAC>0.08% from smartphone audio via SVM on MFCCs + spectral features.
+
+READING PROTOCOL:
+- Corpus: "La bise et le soleil" (≈49-word phonetically balanced French reference, ISO standard) + 1 randomly selected tongue twister (~10 words) from a pool of 8.
+- Expected normal speech ratio (voiced / total recording): 50-70%. Below 30% suggests either (a) capture issue (mic failure, stopped early) OR (b) severe impairment causing long pauses/stutter. Weight this observation accordingly.
+- Expected speech rate at normal reading: 140-170 wpm for the combined corpus. <110 wpm is suggestive of impairment.` : "VOICE ANALYSIS: Not available for this session."}
 
 Respond with a JSON object matching this schema:
 {

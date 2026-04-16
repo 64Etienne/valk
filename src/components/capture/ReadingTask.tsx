@@ -1,23 +1,16 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { analyzeVoice } from "@/lib/audio/voice-analyzer";
 import type { VoiceFeatures } from "@/lib/audio/voice-analyzer";
+import { pickReadingText } from "@/lib/analysis/reading-text";
 
 interface ReadingTaskProps {
   onComplete: (features: VoiceFeatures) => void;
 }
-
-const READING_TEXT = [
-  "Les chaussettes de l'archiduchesse sont-elles sèches, archi-sèches ?",
-  "Un chasseur sachant chasser sait chasser sans son chien de chasse.",
-  "Si six scies scient six cyprès, six cent six scies scient six cent six cyprès.",
-];
-
-const WORD_COUNT = 30;
 
 const EMPTY_FEATURES: VoiceFeatures = {
   mfccMean: new Array(13).fill(0),
@@ -39,6 +32,8 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
     "intro"
   );
   const [elapsed, setElapsed] = useState(0);
+  // Pick reading text ONCE on mount (stable across re-renders, random per mount)
+  const selection = useMemo(() => pickReadingText(), []);
 
   useEffect(() => {
     if (phase !== "recording") return;
@@ -60,13 +55,13 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
       const features = analyzeVoice(
         result.samples,
         result.sampleRate,
-        WORD_COUNT
+        selection.totalWords
       );
       onComplete(features);
     } else {
       onComplete(EMPTY_FEATURES);
     }
-  }, [recorder, onComplete]);
+  }, [recorder, onComplete, selection]);
 
   if (phase === "processing") {
     return (
@@ -90,12 +85,16 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
           </p>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 space-y-3">
-          {READING_TEXT.map((line, i) => (
-            <p key={i} className="text-zinc-200 text-base leading-relaxed">
-              {line}
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 space-y-4">
+          <p className="text-zinc-200 text-base leading-relaxed">
+            {selection.lines[0]}
+          </p>
+          <div className="pt-3 border-t border-zinc-800">
+            <p className="text-zinc-500 text-xs mb-2">Puis, à un rythme normal :</p>
+            <p className="text-zinc-200 text-base leading-relaxed">
+              {selection.lines[1]}
             </p>
-          ))}
+          </div>
         </div>
 
         {phase === "recording" && (
