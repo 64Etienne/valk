@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCamera } from "@/lib/hooks/useCamera";
 import { useMediaPipe } from "@/lib/hooks/useMediaPipe";
 import { useFeatureExtraction } from "@/lib/hooks/useFeatureExtraction";
@@ -26,16 +26,18 @@ import { unlockAudio } from "@/lib/audio/audio-context";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { saveResult } from "@/lib/storage/session-result";
 
-// Phase durations in ms
+// Phase durations in ms — shortened for "leaving the bar" UX
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
-  phase_1: 8000,
-  // phase_2_close: managed manually (waits for eyes closed + 6s)
-  phase_2_flash: 3000,
-  phase_2_dark: 5000,
-  phase_3: 12000,
+  phase_1: 5000,        // 8s → 5s: enough for baseline pupil + blink
+  phase_2_flash: 3000,  // unchanged (advanced mode only)
+  phase_2_dark: 5000,   // unchanged (advanced mode only)
+  phase_3: 8000,        // 12s → 8s: 2 sinusoidal cycles sufficient for HGN
 };
 
-const PHASE_ORDER: CapturePhase[] = [
+// Basic mode: skip PLR (unreliable on consumer cameras per user audit).
+// Advanced mode (via ?advanced=1) adds phase_2_* for PLR attempt.
+const BASIC_PHASE_ORDER: CapturePhase[] = ["phase_1", "phase_3"];
+const ADVANCED_PHASE_ORDER: CapturePhase[] = [
   "phase_1",
   "phase_2_close",
   "phase_2_flash",
@@ -43,10 +45,18 @@ const PHASE_ORDER: CapturePhase[] = [
   "phase_3",
 ];
 
-const CAPTURE_PHASES = new Set<CapturePhase>(PHASE_ORDER);
-
 export function GuidedCapture() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const includePLR = searchParams?.get("advanced") === "1";
+  const PHASE_ORDER = useMemo(
+    () => (includePLR ? ADVANCED_PHASE_ORDER : BASIC_PHASE_ORDER),
+    [includePLR]
+  );
+  const CAPTURE_PHASES = useMemo(
+    () => new Set<CapturePhase>(PHASE_ORDER),
+    [PHASE_ORDER]
+  );
   const camera = useCamera();
   const mediapipe = useMediaPipe();
   const extraction = useFeatureExtraction();
