@@ -1,36 +1,75 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ResultsDashboard } from "@/components/results/ResultsDashboard";
-import { Spinner } from "@/components/ui/Spinner";
-import { loadResult } from "@/lib/storage/session-result";
-import type { AnalysisResult } from "@/types";
+import { ProgressiveResults } from "@/components/results/ProgressiveResults";
+import { useAnalysisStream } from "@/lib/hooks/useAnalysisStream";
+import {
+  loadResult,
+  loadPayload,
+  saveResult,
+} from "@/lib/storage/session-result";
+import type { AnalysisPayload } from "@/types";
 
 export default function ResultsPage() {
   const router = useRouter();
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const stream = useAnalysisStream();
+  const [mode, setMode] = useState<"cached" | "streaming" | null>(null);
+  const cachedRef = useRef(loadResult());
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    const stored = loadResult();
-    if (stored) {
-      setResult(stored);
-    } else {
-      router.replace("/capture");
-    }
-  }, [router]);
+    if (startedRef.current) return;
+    startedRef.current = true;
 
-  if (!result) {
+    const cached = cachedRef.current;
+    if (cached) {
+      setMode("cached");
+      return;
+    }
+
+    const payload = loadPayload() as AnalysisPayload | null;
+    if (!payload) {
+      router.replace("/capture");
+      return;
+    }
+
+    setMode("streaming");
+    stream.analyze(payload).then((finalResult) => {
+      if (finalResult) {
+        saveResult(finalResult, payload);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (mode === "cached") {
+    const cached = cachedRef.current;
+    if (!cached) return null;
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <Spinner size="lg" />
+      <div className="min-h-screen bg-zinc-950">
+        <ProgressiveResults
+          partial={cached}
+          final={cached}
+          phase="done"
+          error={null}
+        />
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-zinc-950">
-      <ResultsDashboard result={result} />
-    </div>
-  );
+  if (mode === "streaming") {
+    return (
+      <div className="min-h-screen bg-zinc-950">
+        <ProgressiveResults
+          partial={stream.partial}
+          final={stream.final}
+          phase={stream.phase}
+          error={stream.error}
+        />
+      </div>
+    );
+  }
+
+  return null;
 }

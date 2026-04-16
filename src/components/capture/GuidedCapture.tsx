@@ -117,23 +117,30 @@ export function GuidedCapture() {
     setPhase("phase_4_reading");
   }, []);
 
-  // After reading task, build payload with voice features and analyze
-  const handleReadingComplete = useCallback(async (voiceFeats: VoiceFeatures) => {
-    setPhase("extracting");
-
-    if (!context) return;
-
-    const durationMs = performance.now() - captureStartRef.current;
-    const payload = extraction.buildPayload(context, camera.resolution, durationMs, voiceFeats);
-
-    setPhase("analyzing");
-
-    const result = await analysis.analyze(payload);
-    if (result) {
-      saveResult(result, payload);
+  // After reading task, save payload and navigate to /results where streaming begins.
+  // Streaming is managed by /results for progressive UI (first-token ~2s vs ~90s blocking).
+  const handleReadingComplete = useCallback(
+    (voiceFeats: VoiceFeatures) => {
+      setPhase("extracting");
+      if (!context) return;
+      const durationMs = performance.now() - captureStartRef.current;
+      const payload = extraction.buildPayload(
+        context,
+        camera.resolution,
+        durationMs,
+        voiceFeats
+      );
+      // Persist payload; /results will run the stream and persist the final result.
+      try {
+        sessionStorage.setItem("valk-payload", JSON.stringify(payload));
+        sessionStorage.removeItem("valk-result");
+      } catch {
+        /* iOS Private Browsing — fall through, /results will detect and redirect */
+      }
       router.push("/results");
-    }
-  }, [context, extraction, camera.resolution, analysis, router]);
+    },
+    [context, extraction, camera.resolution, router]
+  );
 
   // Advance to the next phase, or finish if all phases are done
   const advancePhase = useCallback(() => {
