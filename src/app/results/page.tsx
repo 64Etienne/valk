@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ResultsDashboard } from "@/components/results/ResultsDashboard";
 import { Spinner } from "@/components/ui/Spinner";
+import { loadResult } from "@/lib/storage/session-result";
 import type { AnalysisResult } from "@/types";
 
 export default function ResultsPage() {
@@ -11,13 +12,9 @@ export default function ResultsPage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("valk-result");
+    const stored = loadResult();
     if (stored) {
-      try {
-        setResult(JSON.parse(stored));
-      } catch {
-        router.replace("/capture");
-      }
+      setResult(stored);
     } else {
       router.replace("/capture");
     }

@@ -23,6 +23,7 @@ import type { VoiceFeatures } from "@/lib/audio/voice-analyzer";
 import type { LandmarkPoint } from "@/lib/eye-tracking/types";
 import { computeEAR, RIGHT_EAR_POINTS, LEFT_EAR_POINTS } from "@/lib/eye-tracking/landmark-utils";
 import { unlockAudio } from "@/lib/audio/audio-context";
+import { saveResult } from "@/lib/storage/session-result";
 
 // Phase durations in ms
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
@@ -120,8 +121,7 @@ export function GuidedCapture() {
 
     const result = await analysis.analyze(payload);
     if (result) {
-      sessionStorage.setItem("valk-result", JSON.stringify(result));
-      sessionStorage.setItem("valk-payload", JSON.stringify(payload));
+      saveResult(result, payload);
       router.push("/results");
     }
   }, [context, extraction, camera.resolution, analysis, router]);
