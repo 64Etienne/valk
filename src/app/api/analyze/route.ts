@@ -178,9 +178,13 @@ export async function POST(request: NextRequest) {
       system: SYSTEM_PROMPT,
     });
 
-    // Check for truncation
+    // Fail loud on truncation — partial JSON masquerading as valid is still broken.
     if (message.stop_reason === "max_tokens") {
-      console.error("Claude response truncated (max_tokens reached)");
+      console.error("Claude response truncated — partial JSON returned");
+      return NextResponse.json(
+        { error: "Réponse IA tronquée (budget de tokens atteint). Réessayez." },
+        { status: 502 }
+      );
     }
 
     // Extract text response
@@ -192,12 +196,20 @@ export async function POST(request: NextRequest) {
     // Robustly extract JSON from Claude's response
     const resultData = extractJSON(textBlock.text);
 
-    // Validate response structure
+    // Validate response structure — fail loud, do NOT return partial data.
     const validated = analysisResultSchema.safeParse(resultData);
     if (!validated.success) {
       console.error("Claude response validation failed:", validated.error.issues);
-      // Return raw data anyway — it's close enough
-      return NextResponse.json(resultData);
+      return NextResponse.json(
+        {
+          error: "Réponse IA malformée. Réessayez.",
+          issues: validated.error.issues.slice(0, 5).map((i) => ({
+            path: i.path.join("."),
+            message: i.message,
+          })),
+        },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json(validated.data);
