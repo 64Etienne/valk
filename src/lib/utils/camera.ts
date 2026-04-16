@@ -13,26 +13,26 @@ function isMobile(): boolean {
 export async function getCamera(
   constraints: CameraConstraints = {}
 ): Promise<MediaStream> {
-  const mobile = isMobile();
   const {
-    width = mobile ? 640 : 1280,
-    height = mobile ? 480 : 720,
+    width = 1280,
+    height = 720,
     facingMode = "user",
-    frameRate = mobile ? 24 : 30,
+    frameRate = 30,
   } = constraints;
 
   try {
+    // Aggressive: ideal HD + 30fps, min 720x540 + 24fps.
     return await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: facingMode },
-        width: { ideal: width },
-        height: { ideal: height },
-        frameRate: { ideal: frameRate },
+        width: { ideal: width, min: 720 },
+        height: { ideal: height, min: 540 },
+        frameRate: { ideal: frameRate, min: 24 },
       },
       audio: false,
     });
   } catch {
-    // Fallback: minimal constraints
+    // Fallback: minimal constraints (accept whatever the device provides)
     return await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: facingMode } },
       audio: false,

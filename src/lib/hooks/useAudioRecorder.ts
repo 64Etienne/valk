@@ -22,11 +22,17 @@ export function useAudioRecorder() {
       setError(null);
       chunksRef.current = [];
 
+      // Bar environment: noise suppression + AGC compensate for
+      // noisy rooms and variable mic distance. Trade-off: less pure
+      // signal (what Suffoletto 2023 wanted) but dramatically more
+      // robust voice ratio in real conditions.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: { ideal: 44100 },
+          channelCount: 1,
         },
       });
       streamRef.current = stream;
