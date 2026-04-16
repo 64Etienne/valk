@@ -23,6 +23,7 @@ import type { VoiceFeatures } from "@/lib/audio/voice-analyzer";
 import type { LandmarkPoint } from "@/lib/eye-tracking/types";
 import { computeEAR, RIGHT_EAR_POINTS, LEFT_EAR_POINTS } from "@/lib/eye-tracking/landmark-utils";
 import { unlockAudio } from "@/lib/audio/audio-context";
+import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { saveResult } from "@/lib/storage/session-result";
 
 // Phase durations in ms
@@ -85,10 +86,6 @@ export function GuidedCapture() {
   const handleInstructionsReady = useCallback(() => {
     // Unlock audio context on user gesture (required for iOS silent mode)
     unlockAudio();
-    // Prevent screen from dimming during capture
-    if ("wakeLock" in navigator) {
-      navigator.wakeLock.request("screen").catch(() => {});
-    }
     setPhase("countdown");
   }, []);
 
@@ -283,6 +280,15 @@ export function GuidedCapture() {
 
   // ── Render ──────────────────────────────────────────────────────────
   const isCapturing = CAPTURE_PHASES.has(phase);
+
+  // Keep screen awake during capture + analysis, re-acquire on visibility return
+  useWakeLock(
+    isCapturing ||
+      phase === "countdown" ||
+      phase === "phase_4_reading" ||
+      phase === "extracting" ||
+      phase === "analyzing"
+  );
 
   return (
     <div className="relative min-h-screen bg-zinc-950">
