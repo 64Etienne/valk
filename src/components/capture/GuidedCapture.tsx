@@ -83,8 +83,8 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
   const [context, setContext] = useState<UserContext | null>(null);
   const [faceDetected, setFaceDetected] = useState(false);
   const [faceLost, setFaceLost] = useState(false);
-  const [pursuitProgress, setPursuitProgress] = useState(0);
   const [phaseElapsed, setPhaseElapsed] = useState(0);
+  const [phase3StartMs, setPhase3StartMs] = useState(0);
   const [eyesClosed, setEyesClosed] = useState(false);
   const [preflightPassed, setPreflightPassed] = useState(false);
   const debugRecorderRef = useRef<ReturnType<typeof createDebugRecorder> | null>(null);
@@ -212,15 +212,20 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
 
     if (currentIdx < PHASE_ORDER.length - 1) {
       const nextPhase = PHASE_ORDER[currentIdx + 1];
-      phaseStartRef.current = performance.now();
+      const now = performance.now();
+      phaseStartRef.current = now;
 
       // Record flash onset/offset for PLR analysis
       if (nextPhase === "phase_2_flash") {
-        const flashStart = performance.now();
         extraction.setFlashTiming(
-          flashStart,
-          flashStart + (PHASE_DURATIONS.phase_2_flash ?? 2000)
+          now,
+          now + (PHASE_DURATIONS.phase_2_flash ?? 2000)
         );
+      }
+
+      // Mark phase_3 start so PursuitDot can run its own RAF animation
+      if (nextPhase === "phase_3") {
+        setPhase3StartMs(now);
       }
 
       setPhase(nextPhase);
@@ -316,14 +321,16 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
       extraction.processFrame(landmarks, timestamp, w, h, video);
 
       // ── Phase 3: smooth pursuit tracking ──
+      // UI motion is driven by PursuitDot's own RAF (60Hz) for smoothness.
+      // Here we only compute target position for pursuit-gain measurement,
+      // using the SAME formula as PursuitDot so measurement matches visual.
       if (currentPhase === "phase_3") {
         const elapsed = timestamp - phaseStartRef.current;
         const phaseDuration = PHASE_DURATIONS.phase_3 ?? 5000;
         const progress = Math.min(1, elapsed / phaseDuration);
-        setPursuitProgress(progress);
 
-        // Sinusoidal target: 2.5 full cycles across the screen
-        const targetX = 0.5 + 0.4 * Math.sin(progress * Math.PI * 6);
+        // Matches PursuitDot: 1.5 cycles, amplitude 0.4, centered at 0.5
+        const targetX = 0.5 + 0.4 * Math.sin(progress * Math.PI * 2 * 1.5);
         extraction.processPursuitFrame(landmarks, timestamp, targetX, 0.5);
       }
 
@@ -465,7 +472,12 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
           )}
 
           {/* Phase 3 -- Smooth pursuit tracking */}
-          {phase === "phase_3" && <PursuitDot progress={pursuitProgress} />}
+          {phase === "phase_3" && phase3StartMs > 0 && (
+            <PursuitDot
+              phaseStartMs={phase3StartMs}
+              phaseDurationMs={PHASE_DURATIONS.phase_3 ?? 8000}
+            />
+          )}
 
           {/* Phase 4 -- Reading task (voice analysis) */}
           {phase === "phase_4_reading" && (
