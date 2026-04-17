@@ -32,6 +32,7 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
     "intro"
   );
   const [elapsed, setElapsed] = useState(0);
+  const [isStopping, setIsStopping] = useState(false);
   // Pick reading text ONCE on mount (stable across re-renders, random per mount)
   const selection = useMemo(() => pickReadingText(), []);
 
@@ -48,20 +49,29 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
   }, [recorder]);
 
   const handleStop = useCallback(() => {
-    const result = recorder.stop();
-    setPhase("processing");
+    if (isStopping) return;
+    // Immediate UI feedback: disable button + spinner. Without this, analyzeVoice
+    // (MFCC + FFT on a ~20s buffer) can block the main thread for 200–400 ms on
+    // iPhone before the phase transition, and users click the button repeatedly.
+    setIsStopping(true);
 
-    if (result) {
-      const features = analyzeVoice(
-        result.samples,
-        result.sampleRate,
-        selection.totalWords
-      );
-      onComplete(features);
-    } else {
-      onComplete(EMPTY_FEATURES);
-    }
-  }, [recorder, onComplete, selection]);
+    // Defer the heavy work one frame so the disabled/spinner state paints first.
+    requestAnimationFrame(() => {
+      const result = recorder.stop();
+      setPhase("processing");
+
+      if (result) {
+        const features = analyzeVoice(
+          result.samples,
+          result.sampleRate,
+          selection.totalWords
+        );
+        onComplete(features);
+      } else {
+        onComplete(EMPTY_FEATURES);
+      }
+    });
+  }, [recorder, onComplete, selection, isStopping]);
 
   if (phase === "processing") {
     return (
@@ -113,9 +123,20 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
               Commencer la lecture
             </Button>
           ) : (
-            <Button onClick={handleStop} size="lg" variant="secondary">
-              <MicOff className="w-4 h-4" />
-              J&apos;ai terminé
+            <Button
+              onClick={handleStop}
+              size="lg"
+              variant="secondary"
+              loading={isStopping}
+            >
+              {isStopping ? (
+                "Analyse en cours…"
+              ) : (
+                <>
+                  <MicOff className="w-4 h-4" />
+                  J&apos;ai terminé
+                </>
+              )}
             </Button>
           )}
         </div>
