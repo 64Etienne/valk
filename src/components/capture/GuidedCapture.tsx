@@ -37,6 +37,7 @@ import {
   condenseBaseline,
 } from "@/lib/calibration/baseline";
 import { DebugStatusOverlay } from "@/components/debug/DebugStatusOverlay";
+import { log, logError } from "@/lib/logger/logger";
 
 // Phase durations in ms — shortened for "leaving the bar" UX
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
@@ -103,12 +104,19 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
   // Keep phaseRef in sync so RAF loop always reads current phase
   useEffect(() => {
     phaseRef.current = phase;
+    log("capture.phase.changed", { phase });
   }, [phase]);
 
   // Start camera + load MediaPipe model
   const handleInit = useCallback(async () => {
-    await Promise.all([camera.start(), mediapipe.load()]);
-  }, [camera, mediapipe]);
+    log("capture.handleInit.start", { mode });
+    const t0 = performance.now();
+    await Promise.all([
+      camera.start().catch((e) => logError("capture.camera.start.rejected", { msg: String(e) })),
+      mediapipe.load().catch((e) => logError("capture.mediapipe.load.rejected", { msg: String(e) })),
+    ]);
+    log("capture.handleInit.done", { elapsedMs: Math.round(performance.now() - t0) });
+  }, [camera, mediapipe, mode]);
 
   // Handle context form submission
   const handleContextSubmit = useCallback((ctx: UserContext) => {
@@ -402,7 +410,10 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
           {camera.isActive && camera.videoReady && mediapipe.isLoaded && !preflightPassed && phase === "idle" && (
             <PreflightGate
               videoEl={camera.videoRef.current}
-              onReady={() => setPreflightPassed(true)}
+              onReady={() => {
+                log("preflight.onReady");
+                setPreflightPassed(true);
+              }}
             />
           )}
 
