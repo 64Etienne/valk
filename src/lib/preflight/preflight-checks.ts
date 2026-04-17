@@ -9,40 +9,76 @@ export interface PreflightIssue {
   message: string;
 }
 
+/**
+ * Resolution check — orientation-independent.
+ *
+ * Mobile portrait (iPhone front camera) naturally returns e.g. 480×640 or
+ * 720×1280 (short side first). We must check against the short/long
+ * dimensions rather than hard-coding width/height.
+ *
+ * Also: resolution is never a reason to HARD-FAIL. A bad resolution reduces
+ * precision but doesn't make capture "impossible" — the user can still get
+ * meaningful signal for pursuit/blink/HGN even at 480p. Downgraded to warn.
+ */
 export function checkResolution(
   width: number,
   height: number
 ): PreflightIssue | null {
-  if (width < 640 || height < 480) {
+  const short = Math.min(width, height);
+  const long = Math.max(width, height);
+
+  if (short === 0 || long === 0) {
     return {
       code: "resolution_low",
       severity: "fail",
-      message: `Résolution ${width}×${height} insuffisante — minimum 640×480. Change d'appareil ou libère la caméra.`,
+      message: "La caméra ne fournit pas de flux vidéo. Recharge la page.",
     };
   }
-  if (width < 1280 || height < 720) {
+
+  if (short < 360 || long < 480) {
     return {
       code: "resolution_low",
       severity: "warn",
-      message: `Résolution ${width}×${height} — précision réduite. HD recommandé pour plus de fiabilité.`,
+      message: `Résolution ${width}×${height} très basse — précision fortement réduite, mais on peut continuer.`,
+    };
+  }
+  if (short < 480 || long < 640) {
+    return {
+      code: "resolution_low",
+      severity: "warn",
+      message: `Résolution ${width}×${height} basse — précision réduite.`,
+    };
+  }
+  if (short < 720 || long < 1280) {
+    return {
+      code: "resolution_low",
+      severity: "warn",
+      message: `Résolution ${width}×${height} — HD recommandé pour plus de fiabilité.`,
     };
   }
   return null;
 }
 
 export function checkFPS(measuredFPS: number): PreflightIssue | null {
-  if (measuredFPS < 18) {
+  if (measuredFPS < 12) {
     return {
       code: "fps_low",
       severity: "fail",
-      message: `FPS ${measuredFPS.toFixed(0)} Hz trop bas — capture inutilisable. Améliore l'éclairage, ferme d'autres apps.`,
+      message: `FPS ${measuredFPS.toFixed(0)} Hz très bas — capture peu fiable. Ferme d'autres apps, améliore l'éclairage.`,
+    };
+  }
+  if (measuredFPS < 20) {
+    return {
+      code: "fps_low",
+      severity: "warn",
+      message: `FPS ${measuredFPS.toFixed(0)} Hz faible — détection des saccades dégradée.`,
     };
   }
   if (measuredFPS < 25) {
     return {
       code: "fps_low",
       severity: "warn",
-      message: `FPS ${measuredFPS.toFixed(0)} Hz — détection fine des saccades dégradée. Essaie dans un endroit mieux éclairé.`,
+      message: `FPS ${measuredFPS.toFixed(0)} Hz — essaie un éclairage plus vif pour améliorer la fluidité.`,
     };
   }
   return null;
