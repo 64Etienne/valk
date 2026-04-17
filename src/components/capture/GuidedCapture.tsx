@@ -36,6 +36,7 @@ import {
   saveBaseline,
   condenseBaseline,
 } from "@/lib/calibration/baseline";
+import { DebugStatusOverlay } from "@/components/debug/DebugStatusOverlay";
 
 // Phase durations in ms — shortened for "leaving the bar" UX
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
@@ -393,8 +394,12 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
             </div>
           )}
 
-          {/* Preflight gate: measures FPS + resolution before capture */}
-          {camera.isActive && mediapipe.isLoaded && !preflightPassed && phase === "idle" && (
+          {/* Preflight gate: measures FPS + resolution before capture.
+              Gated on camera.videoReady (not ref.current read at render time)
+              to avoid a commit-phase race where videoRef is still null when
+              this subtree first mounts. videoReady flips to true only after
+              loadedmetadata fires AND videoWidth>0. */}
+          {camera.isActive && camera.videoReady && mediapipe.isLoaded && !preflightPassed && phase === "idle" && (
             <PreflightGate
               videoEl={camera.videoRef.current}
               onReady={() => setPreflightPassed(true)}
@@ -483,16 +488,69 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
             />
           )}
 
-          {/* MediaPipe model loading indicator (bottom-left) */}
-          {mediapipe.isLoading && (
-            <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2 bg-zinc-900/80 rounded-lg px-3 py-2">
+          {/* MediaPipe model loading — prominent top banner. Previously this
+              was a tiny bottom-left badge that users missed on mobile. */}
+          {mediapipe.isLoading && phase === "idle" && (
+            <div className="absolute top-4 left-4 right-4 z-30 flex items-center gap-3 bg-violet-950/95 border border-violet-500/50 rounded-xl px-4 py-3 shadow-lg">
               <Spinner size="sm" />
-              <span className="text-xs text-zinc-400">
-                Chargement du modèle...
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-violet-100">
+                  Chargement du modèle IA...
+                </div>
+                <div className="text-xs text-zinc-300">
+                  5-30 secondes au premier lancement
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MediaPipe error — previously invisible once camera was active */}
+          {mediapipe.error && phase === "idle" && (
+            <div className="absolute top-4 left-4 right-4 z-30 bg-red-950/95 border border-red-500/60 rounded-xl px-4 py-3 shadow-lg">
+              <div className="text-sm font-semibold text-red-200">
+                Erreur de chargement du modèle
+              </div>
+              <div className="text-xs text-zinc-300 mt-1">{mediapipe.error}</div>
+              <button
+                onClick={() => mediapipe.load()}
+                className="mt-2 text-xs text-violet-300 underline hover:text-violet-200"
+              >
+                Réessayer
+              </button>
+            </div>
+          )}
+
+          {/* Waiting for the first frame after camera permission granted */}
+          {camera.isActive && !camera.videoReady && !mediapipe.error && phase === "idle" && (
+            <div className="absolute top-4 left-4 right-4 z-30 flex items-center gap-3 bg-zinc-900/95 border border-zinc-700 rounded-xl px-4 py-3">
+              <Spinner size="sm" />
+              <span className="text-sm text-zinc-300">
+                Initialisation de la caméra…
               </span>
             </div>
           )}
         </div>
+
+        <DebugStatusOverlay
+          state={{
+            phase,
+            "camera.isActive": camera.isActive,
+            "camera.videoReady": camera.videoReady,
+            "camera.error": camera.error,
+            "camera.resolution": `${camera.resolution.width}x${camera.resolution.height}`,
+            "video.videoWidth": camera.videoRef.current?.videoWidth ?? null,
+            "video.videoHeight": camera.videoRef.current?.videoHeight ?? null,
+            "video.readyState": camera.videoRef.current?.readyState ?? null,
+            "video.srcObject": !!camera.videoRef.current?.srcObject,
+            "mp.isLoading": mediapipe.isLoading,
+            "mp.isLoaded": mediapipe.isLoaded,
+            "mp.error": mediapipe.error,
+            preflightPassed,
+            mode,
+            "wakeLock.supported": typeof navigator !== "undefined" && "wakeLock" in navigator,
+            "speechSynthesis.supported": typeof speechSynthesis !== "undefined",
+          }}
+        />
       </CameraPermissionGate>
     </div>
   );

@@ -18,9 +18,10 @@ type RVFCVideo = HTMLVideoElement & {
   requestVideoFrameCallback?: (cb: () => void) => number;
 };
 
-// FPS measurement window: 600ms is enough for a rough average (≥15 frames @ 25fps)
-// and keeps the gate imperceptible when conditions are fine.
 const FPS_WINDOW_MS = 600;
+// Hard watchdog: even if the FPS loop or something else hangs, we force-advance
+// after this much time so the user is never stuck on an invisible preflight.
+const WATCHDOG_MS = 5000;
 
 export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
   const [issues, setIssues] = useState<PreflightIssue[]>([]);
@@ -30,6 +31,12 @@ export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
   useEffect(() => {
     if (!videoEl) return;
     let cancelled = false;
+    const watchdog = setTimeout(() => {
+      if (cancelled) return;
+      console.warn("[preflight] watchdog fired — forcing advance after 5s");
+      setIssues([]);
+      setState("done");
+    }, WATCHDOG_MS);
 
     const run = async () => {
       const w = videoEl.videoWidth;
@@ -68,6 +75,7 @@ export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
       const fpsIssue = checkFPS(fps);
       if (fpsIssue) found.push(fpsIssue);
 
+      clearTimeout(watchdog);
       setIssues(found);
       setState("done");
     };
@@ -75,10 +83,10 @@ export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
     run();
     return () => {
       cancelled = true;
+      clearTimeout(watchdog);
     };
   }, [videoEl]);
 
-  // Auto-advance the moment measurement is done AND no issues — zero extra click.
   useEffect(() => {
     if (
       state === "done" &&
@@ -92,8 +100,6 @@ export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
 
   const hasFail = issues.some((i) => i.severity === "fail");
 
-  // Happy path: no UI during measuring (600ms is imperceptible) and no UI
-  // when auto-advancing. Gate only shows when there are actual warnings or fails.
   if (state === "measuring") return null;
   if (issues.length === 0) return null;
 
