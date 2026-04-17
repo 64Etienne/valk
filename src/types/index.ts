@@ -81,6 +81,20 @@ export interface AnalysisPayload {
     deviceInfo: string;
     cameraResolution: { width: number; height: number };
   };
+  personalBaseline?: PersonalBaseline;
+}
+
+export interface PersonalBaseline {
+  pupilDiameterAvgMm: number;
+  blinkRate: number;
+  perclos: number;
+  pursuitGain: number;
+  saccadeCount: number;
+  scleralRedness: number;
+  speechRateWpm?: number;
+  pauseCount?: number;
+  capturedAt: string;
+  ageDays: number;
 }
 
 // Analysis result from Claude
