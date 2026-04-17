@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/Button";
-import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { AlertCircle, XCircle } from "lucide-react";
 import {
   checkResolution,
   checkFPS,
@@ -18,9 +18,14 @@ type RVFCVideo = HTMLVideoElement & {
   requestVideoFrameCallback?: (cb: () => void) => number;
 };
 
+// FPS measurement window: 600ms is enough for a rough average (≥15 frames @ 25fps)
+// and keeps the gate imperceptible when conditions are fine.
+const FPS_WINDOW_MS = 600;
+
 export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
   const [issues, setIssues] = useState<PreflightIssue[]>([]);
   const [state, setState] = useState<"measuring" | "done">("measuring");
+  const autoAdvancedRef = useRef(false);
 
   useEffect(() => {
     if (!videoEl) return;
@@ -34,14 +39,13 @@ export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
       const resIssue = checkResolution(w, h);
       if (resIssue) found.push(resIssue);
 
-      // Measure FPS over 1.5s
       let frames = 0;
       const start = performance.now();
       const vEl = videoEl as RVFCVideo;
       await new Promise<void>((res) => {
         const tick = () => {
           frames++;
-          if (performance.now() - start >= 1500) {
+          if (performance.now() - start >= FPS_WINDOW_MS) {
             res();
             return;
           }
@@ -74,20 +78,24 @@ export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
     };
   }, [videoEl]);
 
+  // Auto-advance the moment measurement is done AND no issues — zero extra click.
+  useEffect(() => {
+    if (
+      state === "done" &&
+      issues.length === 0 &&
+      !autoAdvancedRef.current
+    ) {
+      autoAdvancedRef.current = true;
+      onReady();
+    }
+  }, [state, issues, onReady]);
+
   const hasFail = issues.some((i) => i.severity === "fail");
 
-  if (state === "measuring") {
-    return (
-      <div className="absolute inset-0 z-40 bg-zinc-950/95 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-2 border-violet-500 border-t-transparent rounded-full mx-auto" />
-          <p className="text-zinc-400 mt-4 text-sm">
-            Vérification des conditions...
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // Happy path: no UI during measuring (600ms is imperceptible) and no UI
+  // when auto-advancing. Gate only shows when there are actual warnings or fails.
+  if (state === "measuring") return null;
+  if (issues.length === 0) return null;
 
   return (
     <div className="absolute inset-0 z-40 bg-zinc-950/95 flex items-center justify-center p-6">
@@ -95,40 +103,30 @@ export function PreflightGate({ videoEl, onReady }: PreflightGateProps) {
         <div className="flex items-center gap-2">
           {hasFail ? (
             <XCircle className="w-6 h-6 text-red-400" />
-          ) : issues.length > 0 ? (
-            <AlertCircle className="w-6 h-6 text-amber-400" />
           ) : (
-            <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+            <AlertCircle className="w-6 h-6 text-amber-400" />
           )}
           <h2 className="text-lg font-semibold text-zinc-100">
-            {hasFail
-              ? "Capture impossible"
-              : issues.length > 0
-                ? "Conditions marginales"
-                : "Conditions OK"}
+            {hasFail ? "Capture impossible" : "Conditions marginales"}
           </h2>
         </div>
 
-        {issues.length > 0 && (
-          <ul className="space-y-2">
-            {issues.map((iss, i) => (
-              <li
-                key={i}
-                className={`text-sm ${
-                  iss.severity === "fail" ? "text-red-400" : "text-amber-400"
-                }`}
-              >
-                • {iss.message}
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="space-y-2">
+          {issues.map((iss, i) => (
+            <li
+              key={i}
+              className={`text-sm ${
+                iss.severity === "fail" ? "text-red-400" : "text-amber-400"
+              }`}
+            >
+              • {iss.message}
+            </li>
+          ))}
+        </ul>
 
         {!hasFail && (
           <Button onClick={onReady} size="lg" className="w-full">
-            {issues.length > 0
-              ? "Continuer quand même"
-              : "Commencer la capture"}
+            Continuer quand même
           </Button>
         )}
       </div>
