@@ -39,24 +39,24 @@ import {
 import { DebugStatusOverlay } from "@/components/debug/DebugStatusOverlay";
 import { log, logError } from "@/lib/logger/logger";
 
-// Phase durations in ms — shortened for "leaving the bar" UX
+// Phase durations in ms
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
-  phase_1: 5000,        // 8s → 5s: enough for baseline pupil + blink
-  phase_2_flash: 3000,  // unchanged (advanced mode only)
-  phase_2_dark: 5000,   // unchanged (advanced mode only)
-  phase_3: 8000,        // 12s → 8s: 2 sinusoidal cycles sufficient for HGN
+  phase_1: 5000,        // baseline pupil + blink
+  phase_2_flash: 3000,  // PLR flash
+  phase_2_dark: 5000,   // PLR dark recovery
+  phase_3: 8000,        // smooth pursuit, 2 sinusoidal cycles
 };
 
-// Basic mode: skip PLR (unreliable on consumer cameras per user audit).
-// Advanced mode (via ?advanced=1) adds phase_2_* for PLR attempt.
-const BASIC_PHASE_ORDER: CapturePhase[] = ["phase_1", "phase_3"];
-const ADVANCED_PHASE_ORDER: CapturePhase[] = [
+// Full protocol by default (includes PLR dilatation test).
+// Set ?basic=1 to skip PLR for quick "leaving the bar" captures.
+const FULL_PHASE_ORDER: CapturePhase[] = [
   "phase_1",
   "phase_2_close",
   "phase_2_flash",
   "phase_2_dark",
   "phase_3",
 ];
+const BASIC_PHASE_ORDER: CapturePhase[] = ["phase_1", "phase_3"];
 
 interface GuidedCaptureProps {
   mode?: "analyze" | "baseline";
@@ -65,10 +65,10 @@ interface GuidedCaptureProps {
 export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const includePLR = searchParams?.get("advanced") === "1";
+  const skipPLR = searchParams?.get("basic") === "1";
   const PHASE_ORDER = useMemo(
-    () => (includePLR ? ADVANCED_PHASE_ORDER : BASIC_PHASE_ORDER),
-    [includePLR]
+    () => (skipPLR ? BASIC_PHASE_ORDER : FULL_PHASE_ORDER),
+    [skipPLR]
   );
   const CAPTURE_PHASES = useMemo(
     () => new Set<CapturePhase>(PHASE_ORDER),
@@ -398,7 +398,14 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
           {/* Phase progress indicator bar */}
           {isCapturing && (
             <div className="absolute top-0 left-0 right-0 z-20">
-              <PhaseIndicator phase={phase} />
+              <PhaseIndicator
+                phase={phase}
+                groups={
+                  skipPLR
+                    ? ["phase_1", "phase_3", "phase_4"]
+                    : ["phase_1", "phase_2", "phase_3", "phase_4"]
+                }
+              />
             </div>
           )}
 

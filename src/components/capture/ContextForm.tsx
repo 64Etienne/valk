@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "../ui/Button";
 import { Clock, Moon, User, Sun, AlertTriangle } from "lucide-react";
 import { TelemetryOptIn } from "./TelemetryOptIn";
@@ -11,14 +11,46 @@ interface ContextFormProps {
   onSubmit: (context: UserContext) => void;
 }
 
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+function defaultWakeTime(): string {
+  // Default heuristic: 8h before now, rounded to nearest 15 min, clamped between 05:00 and 12:00
+  const now = new Date();
+  const guess = new Date(now.getTime() - 8 * 3600_000);
+  let h = guess.getHours();
+  let m = Math.round(guess.getMinutes() / 15) * 15;
+  if (m === 60) {
+    m = 0;
+    h = (h + 1) % 24;
+  }
+  if (h < 5) h = 7;
+  if (h > 12 && now.getHours() >= 10) h = 7;
+  return `${pad2(h)}:${pad2(m)}`;
+}
+
+function computeHoursSinceWake(wakeTime: string, now: Date = new Date()): number {
+  const [hh, mm] = wakeTime.split(":").map((x) => parseInt(x, 10));
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return 0;
+  const wake = new Date(now);
+  wake.setHours(hh, mm, 0, 0);
+  let diffMs = now.getTime() - wake.getTime();
+  // If wake is in the future (e.g. user says "j'ai réveillé à 23h" and it's 1h du matin),
+  // assume wake was yesterday.
+  if (diffMs < 0) diffMs += 24 * 3600_000;
+  return Math.round((diffMs / 3600_000) * 10) / 10;
+}
+
 export function ContextForm({ onSubmit }: ContextFormProps) {
-  const [hoursAwake, setHoursAwake] = useState(8);
+  const [wakeTime, setWakeTime] = useState<string>(defaultWakeTime);
   const [age, setAge] = useState(25);
   const [lighting, setLighting] = useState<"bright" | "moderate" | "dim">("moderate");
   const [substance, setSubstance] = useState("");
 
   const now = new Date();
-  const timeOfDay = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+  const timeOfDay = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  const hoursAwake = useMemo(() => computeHoursSinceWake(wakeTime, now), [wakeTime, now]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,21 +85,23 @@ export function ContextForm({ onSubmit }: ContextFormProps) {
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-zinc-300 mb-2">
             <Moon className="w-4 h-4 text-violet-400" />
-            Heures d'éveil
+            Heure de réveil aujourd&apos;hui
           </label>
           <div className="flex items-center gap-3">
             <input
-              type="range"
-              min={0}
-              max={36}
-              step={0.5}
-              value={hoursAwake}
-              onChange={(e) => setHoursAwake(parseFloat(e.target.value))}
-              className="flex-1 accent-violet-500"
+              type="time"
+              value={wakeTime}
+              step={900}
+              onChange={(e) => setWakeTime(e.target.value || "07:00")}
+              className="flex-1 px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
-            <span className="text-sm text-zinc-300 w-10 text-right">{hoursAwake}h</span>
+            <span className="text-xs text-zinc-500 w-28 text-right">
+              → {hoursAwake} h éveil
+            </span>
           </div>
-          <p className="text-xs text-zinc-500 mt-1">Depuis combien de temps êtes-vous éveillé(e) ?</p>
+          <p className="text-xs text-zinc-500 mt-1">
+            À quelle heure t&apos;es-tu réveillé(e) ce matin ?
+          </p>
         </div>
 
         <div>

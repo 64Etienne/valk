@@ -11,6 +11,7 @@ import {
 } from "@/lib/storage/session-result";
 import { buildTelemetryEvent, sendTelemetry } from "@/lib/telemetry/telemetry";
 import { computeVerdict } from "@/lib/analysis/verdict";
+import { log, logError } from "@/lib/logger/logger";
 import type { AnalysisPayload } from "@/types";
 
 export default function ResultsPage() {
@@ -24,41 +25,62 @@ export default function ResultsPage() {
     if (startedRef.current) return;
     startedRef.current = true;
 
+    log("results.mount", {
+      hasCached: !!cachedRef.current,
+    });
+
     const cached = cachedRef.current;
     if (cached) {
+      log("results.mode.cached");
       setMode("cached");
       return;
     }
 
     const payload = loadPayload() as AnalysisPayload | null;
+    log("results.loadPayload", {
+      hasPayload: !!payload,
+      payloadSize: payload ? JSON.stringify(payload).length : 0,
+    });
     if (!payload) {
+      log("results.redirect.capture.noPayload");
       router.replace("/capture");
       return;
     }
 
+    log("results.mode.streaming");
     setMode("streaming");
     const streamStart = performance.now();
-    stream.analyze(payload).then((finalResult) => {
-      if (finalResult) {
-        saveResult(finalResult, payload);
-        // Telemetry opt-in (localStorage-gated, silent on failure)
-        try {
-          if (localStorage.getItem("valk-telemetry-consent") === "1") {
-            const verdict = computeVerdict(finalResult);
-            sendTelemetry(
-              buildTelemetryEvent(
-                payload,
-                finalResult,
-                verdict.level,
-                performance.now() - streamStart
-              )
-            );
+    stream
+      .analyze(payload)
+      .then((finalResult) => {
+        log("results.stream.settled", { hasFinal: !!finalResult });
+        if (finalResult) {
+          saveResult(finalResult, payload);
+          try {
+            if (localStorage.getItem("valk-telemetry-consent") === "1") {
+              const verdict = computeVerdict(finalResult);
+              sendTelemetry(
+                buildTelemetryEvent(
+                  payload,
+                  finalResult,
+                  verdict.level,
+                  performance.now() - streamStart
+                )
+              );
+              log("results.telemetry.sent", { verdict: verdict.level });
+            }
+          } catch (err) {
+            logError("results.telemetry.failed", {
+              msg: (err as Error)?.message,
+            });
           }
-        } catch {
-          /* localStorage unavailable — skip telemetry */
         }
-      }
-    });
+      })
+      .catch((err) => {
+        logError("results.stream.rejected", {
+          msg: (err as Error)?.message,
+        });
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
