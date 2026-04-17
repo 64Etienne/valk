@@ -31,6 +31,11 @@ import {
   createDebugRecorder,
   uploadDebugBundle,
 } from "@/lib/debug/debug-mode";
+import {
+  loadBaseline,
+  saveBaseline,
+  condenseBaseline,
+} from "@/lib/calibration/baseline";
 
 // Phase durations in ms — shortened for "leaving the bar" UX
 const PHASE_DURATIONS: Partial<Record<CapturePhase, number>> = {
@@ -51,7 +56,11 @@ const ADVANCED_PHASE_ORDER: CapturePhase[] = [
   "phase_3",
 ];
 
-export function GuidedCapture() {
+interface GuidedCaptureProps {
+  mode?: "analyze" | "baseline";
+}
+
+export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const includePLR = searchParams?.get("advanced") === "1";
@@ -142,6 +151,19 @@ export function GuidedCapture() {
         voiceFeats
       );
 
+      // Baseline mode: save as personal baseline and exit without running analysis
+      if (mode === "baseline") {
+        saveBaseline(payload);
+        router.push("/baseline?saved=1");
+        return;
+      }
+
+      // Analyze mode: attach condensed personal baseline if available
+      const baselineRaw = loadBaseline();
+      if (baselineRaw) {
+        payload.personalBaseline = condenseBaseline(baselineRaw);
+      }
+
       // Debug mode: stop recorder + upload bundle (fire-and-forget)
       if (isDebugEnabled() && debugRecorderRef.current) {
         const video = await debugRecorderRef.current.stop();
@@ -171,7 +193,7 @@ export function GuidedCapture() {
       }
       router.push("/results");
     },
-    [context, extraction, camera.resolution, router]
+    [context, extraction, camera.resolution, router, mode]
   );
 
   // Advance to the next phase, or finish if all phases are done

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "../ui/Button";
 import { Clock, Moon, User, Sun, AlertTriangle } from "lucide-react";
 import { TelemetryOptIn } from "./TelemetryOptIn";
+import { BaselineStatusBadge } from "./BaselineStatusBadge";
 import type { UserContext } from "@/types";
 
 interface ContextFormProps {
@@ -32,9 +33,12 @@ export function ContextForm({ onSubmit }: ContextFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto p-6">
-      <div>
-        <h2 className="text-lg font-semibold text-zinc-100 mb-1">Contexte</h2>
-        <p className="text-sm text-zinc-400">Ces informations améliorent la précision de l'analyse.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-100 mb-1">Contexte</h2>
+          <p className="text-sm text-zinc-400">Ces informations améliorent la précision de l&apos;analyse.</p>
+        </div>
+        <BaselineStatusBadge />
       </div>
 
       <div className="space-y-4">

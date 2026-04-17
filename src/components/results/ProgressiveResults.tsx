@@ -4,6 +4,7 @@ import { CategoryCard } from "./CategoryCard";
 import { CategoryCardSkeleton } from "./CategoryCardSkeleton";
 import { OverallSummary } from "./OverallSummary";
 import { VerdictBanner } from "./VerdictBanner";
+import { BaselineCompareBanner } from "./BaselineCompareBanner";
 import { DisclaimerFooter } from "./DisclaimerFooter";
 import { Button } from "../ui/Button";
 import { Spinner } from "../ui/Spinner";
@@ -77,6 +78,8 @@ export function ProgressiveResults({
       </div>
 
       {hasAllCategoriesComplete && final && <VerdictBanner result={final} />}
+
+      {phase === "done" && <BaselineCompareBanner />}
 
       {display.summary && final && <OverallSummary result={final} />}
 

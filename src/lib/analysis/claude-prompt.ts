@@ -47,6 +47,13 @@ RESPONSE LENGTH BUDGET:
 - summary: 2 sentences maximum, in French.
 - Prefer concise, evidence-dense prose.
 
+PERSONAL BASELINE:
+If the payload contains \`personalBaseline\`, it represents this subject's measurements captured when sober, rested, in good lighting conditions. When present, your primary task shifts from population-normalized scoring to Δ-from-baseline scoring:
+- Report observations as deltas: "+0.4mm pupil dilation vs. baseline", "+8 blinks/min above baseline", "pursuit gain dropped 0.15 below baseline".
+- Score severity based on magnitude of deviation, not absolute values. A subject whose baseline blink rate is 22/min and current is 24/min has NO alcohol concern. Same subject at 35/min would.
+- Still cite the reference studies for what magnitudes matter (e.g., Tyson 2021 pursuit gain drops of 0.20+ correlate with BAC 0.04%).
+- If baseline is older than 90 days (ageDays > 90), flag this as a LIMITATION and slightly discount confidence.
+
 You MUST respond with valid JSON matching the schema. No markdown, no explanation outside JSON.`;
 
 export function buildUserPrompt(payload: AnalysisPayload): string {
@@ -66,6 +73,21 @@ CAPTURE METADATA:
 - Age: ${payload.context.age}
 - Lighting: ${payload.context.ambientLighting}
 ${payload.context.selfReportedSubstanceUse ? `- Self-reported substance: ${payload.context.selfReportedSubstanceUse}` : ""}
+${
+  payload.personalBaseline
+    ? `
+PERSONAL BASELINE (captured ${payload.personalBaseline.ageDays.toFixed(0)} days ago):
+- Pupil diameter avg: ${payload.personalBaseline.pupilDiameterAvgMm.toFixed(2)}mm (current: ${((payload.baseline.pupilDiameterMm.left + payload.baseline.pupilDiameterMm.right) / 2).toFixed(2)}mm)
+- Blink rate: ${payload.personalBaseline.blinkRate}/min (current: ${payload.baseline.blinkRate}/min)
+- PERCLOS: ${(payload.personalBaseline.perclos * 100).toFixed(1)}% (current: ${(payload.baseline.perclos * 100).toFixed(1)}%)
+- Pursuit gain: ${payload.personalBaseline.pursuitGain.toFixed(2)} (current: ${payload.pursuit.smoothPursuitGainRatio.toFixed(2)})
+- Saccades during pursuit: ${payload.personalBaseline.saccadeCount} (current: ${payload.pursuit.saccadeCount})
+- Scleral redness: ${payload.personalBaseline.scleralRedness.toFixed(1)} (current: ${payload.baseline.scleralRednessIndex.toFixed(1)})
+${payload.personalBaseline.speechRateWpm && payload.voiceAnalysis ? `- Speech rate: ${payload.personalBaseline.speechRateWpm} wpm (current: ${payload.voiceAnalysis.speechRateWordsPerMin} wpm)` : ""}
+Use Δ values as PRIMARY signal. Population norms are SECONDARY when baseline is present.
+`
+    : ""
+}
 
 BASELINE MEASUREMENTS:
 - Pupil diameter: L=${payload.baseline.pupilDiameterMm.left}mm, R=${payload.baseline.pupilDiameterMm.right}mm
