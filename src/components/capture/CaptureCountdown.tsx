@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { FaceGuideOval } from "./FaceGuideOval";
 import { CircularProgress } from "../ui/CircularProgress";
+import { playBeep, vibrate } from "@/lib/audio/audio-context";
 
 interface CaptureCountdownProps {
   onComplete: () => void;
@@ -18,15 +19,21 @@ export function CaptureCountdown({
   const startRef = useRef(0);
   const rafRef = useRef(0);
 
-  // Countdown timer (1s per step)
+  // Countdown timer (1s per step).
+  // Audio cues: short tick at each step (3/2/1), longer "go" tone at 0.
+  // AudioContext was unlocked in the previous phase (instructions onReady),
+  // so these will play on iOS even with the device in silent mode.
   useEffect(() => {
     if (!faceDetected) return;
 
     if (count === 0) {
+      playBeep(1200, 220, 0.35);
+      vibrate([60, 40, 60]);
       onComplete();
       return;
     }
 
+    playBeep(700, 80, 0.25);
     const timer = setTimeout(() => setCount((c) => c - 1), 1000);
     return () => clearTimeout(timer);
   }, [count, faceDetected, onComplete]);

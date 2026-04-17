@@ -3,10 +3,12 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { Button } from "../ui/Button";
+import { Spinner } from "../ui/Spinner";
 import { useAudioRecorder } from "@/lib/hooks/useAudioRecorder";
 import { analyzeVoice } from "@/lib/audio/voice-analyzer";
 import type { VoiceFeatures } from "@/lib/audio/voice-analyzer";
 import { pickReadingText } from "@/lib/analysis/reading-text";
+import { vibrate } from "@/lib/audio/audio-context";
 
 interface ReadingTaskProps {
   onComplete: (features: VoiceFeatures) => void;
@@ -32,7 +34,6 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
     "intro"
   );
   const [elapsed, setElapsed] = useState(0);
-  const [isStopping, setIsStopping] = useState(false);
   // Pick reading text ONCE on mount (stable across re-renders, random per mount)
   const selection = useMemo(() => pickReadingText(), []);
 
@@ -49,34 +50,51 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
   }, [recorder]);
 
   const handleStop = useCallback(() => {
-    if (isStopping) return;
-    // Immediate UI feedback: disable button + spinner. Without this, analyzeVoice
-    // (MFCC + FFT on a ~20s buffer) can block the main thread for 200–400 ms on
-    // iPhone before the phase transition, and users click the button repeatedly.
-    setIsStopping(true);
+    if (phase === "processing") return;
+    // Full-screen overlay is swapped in the SAME React commit as the click —
+    // users see immediate confirmation. The previous button-only state update
+    // could be skipped on iPhone because analyzeVoice (MFCC+FFT on a 20s
+    // buffer, 200-400ms block) started before React committed the paint.
+    vibrate(40);
+    setPhase("processing");
 
-    // Defer the heavy work one frame so the disabled/spinner state paints first.
+    // Double RAF: guarantees ≥ 1 full frame (commit + paint) happens before
+    // the blocking analyzeVoice call. First RAF fires before paint of the
+    // next frame; the inner RAF fires AFTER that frame's paint.
     requestAnimationFrame(() => {
-      const result = recorder.stop();
-      setPhase("processing");
-
-      if (result) {
-        const features = analyzeVoice(
-          result.samples,
-          result.sampleRate,
-          selection.totalWords
-        );
-        onComplete(features);
-      } else {
-        onComplete(EMPTY_FEATURES);
-      }
+      requestAnimationFrame(() => {
+        const result = recorder.stop();
+        if (result) {
+          const features = analyzeVoice(
+            result.samples,
+            result.sampleRate,
+            selection.totalWords
+          );
+          onComplete(features);
+        } else {
+          onComplete(EMPTY_FEATURES);
+        }
+      });
     });
-  }, [recorder, onComplete, selection, isStopping]);
+  }, [recorder, onComplete, selection, phase]);
 
   if (phase === "processing") {
     return (
-      <div className="absolute inset-0 z-30 bg-zinc-950 flex items-center justify-center">
-        <p className="text-zinc-400">Analyse vocale...</p>
+      <div className="absolute inset-0 z-40 bg-zinc-950 flex flex-col items-center justify-center gap-6 p-6">
+        <div className="relative flex items-center justify-center">
+          <div className="absolute inset-0 rounded-full bg-violet-500/20 animate-ping" />
+          <div className="relative">
+            <Spinner size="lg" />
+          </div>
+        </div>
+        <div className="text-center space-y-2">
+          <p className="text-zinc-100 text-lg font-semibold">
+            Analyse vocale en cours…
+          </p>
+          <p className="text-zinc-400 text-sm">
+            Extraction des paramètres acoustiques
+          </p>
+        </div>
       </div>
     );
   }
@@ -100,7 +118,9 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
             {selection.lines[0]}
           </p>
           <div className="pt-3 border-t border-zinc-800">
-            <p className="text-zinc-500 text-xs mb-2">Puis, à un rythme normal :</p>
+            <p className="text-zinc-500 text-xs mb-2">
+              Puis, à un rythme normal :
+            </p>
             <p className="text-zinc-200 text-base leading-relaxed">
               {selection.lines[1]}
             </p>
@@ -127,16 +147,10 @@ export function ReadingTask({ onComplete }: ReadingTaskProps) {
               onClick={handleStop}
               size="lg"
               variant="secondary"
-              loading={isStopping}
+              className="active:scale-95 transition-transform duration-75"
             >
-              {isStopping ? (
-                "Analyse en cours…"
-              ) : (
-                <>
-                  <MicOff className="w-4 h-4" />
-                  J&apos;ai terminé
-                </>
-              )}
+              <MicOff className="w-4 h-4" />
+              J&apos;ai terminé
             </Button>
           )}
         </div>

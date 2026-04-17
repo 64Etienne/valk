@@ -3,52 +3,83 @@
 import { useEffect, useRef } from "react";
 
 interface PursuitDotProps {
-  /** performance.now() timestamp marking phase start. */
   phaseStartMs: number;
-  /** Total phase duration in ms (e.g. 8000). */
   phaseDurationMs: number;
 }
 
 const CYCLES = 1.5;
+// 240 keyframes over 8s = one sample per ~33ms. The browser interpolates
+// linearly between samples at compositor refresh rate (60–120 Hz).
+const SAMPLES = 240;
 
 /**
- * Smooth-pursuit target dot.
+ * Smooth-pursuit target, animated on the compositor thread.
  *
- * Animates at a full display refresh rate (60–120 Hz) via its own RAF loop,
- * decoupled from MediaPipe's detection FPS (which drops to 10–15 Hz on iPhone
- * Safari). Writes the CSS `left` value directly to the DOM through a ref so
- * React never re-renders during the phase. Without this, the dot's position
- * was gated by React state updates tied to MediaPipe callbacks, producing the
- * jerky "saccadé" motion the user reported.
+ * Uses the Web Animations API with pre-computed keyframes of
+ * `transform: translate3d(Xpx, 0, 0)` sampled from a sine wave.
+ * `transform` + `translate3d` + `will-change: transform` forces hardware
+ * compositing in WebKit/Blink — the animation runs on a separate thread and
+ * is unaffected by main-thread blocks from MediaPipe's WASM detector
+ * (40-80ms per frame on iPhone Safari). An earlier RAF-based implementation
+ * stuttered because RAF itself was gated by the same blocked main thread.
  */
 export function PursuitDot({ phaseStartMs, phaseDurationMs }: PursuitDotProps) {
-  const dotRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dotRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const container = containerRef.current;
     const el = dotRef.current;
-    if (!el) return;
-    let raf = 0;
-    const tick = () => {
-      const elapsed = performance.now() - phaseStartMs;
-      const p = Math.max(0, Math.min(1, elapsed / phaseDurationMs));
-      const x = 50 + 40 * Math.sin(p * Math.PI * 2 * CYCLES);
-      el.style.left = `${x}%`;
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    if (!container || !el) return;
+
+    const width = container.clientWidth;
+    if (width === 0) return;
+
+    const centerPx = width * 0.5;
+    const ampPx = width * 0.4;
+
+    const keyframes: Keyframe[] = [];
+    for (let i = 0; i <= SAMPLES; i++) {
+      const p = i / SAMPLES;
+      const x = centerPx + ampPx * Math.sin(p * Math.PI * 2 * CYCLES);
+      keyframes.push({ transform: `translate3d(${x}px, 0, 0)` });
+    }
+
+    const anim = el.animate(keyframes, {
+      duration: phaseDurationMs,
+      easing: "linear",
+      fill: "forwards",
+    });
+
+    const elapsed = performance.now() - phaseStartMs;
+    if (elapsed > 0 && elapsed < phaseDurationMs) {
+      anim.currentTime = elapsed;
+    }
+
+    return () => anim.cancel();
   }, [phaseStartMs, phaseDurationMs]);
 
   return (
     <>
       <div className="absolute inset-0 z-10 bg-white/90" />
-      <div className="absolute inset-0 z-20 pointer-events-none">
+      <div
+        ref={containerRef}
+        className="absolute inset-0 z-20 pointer-events-none"
+      >
         <div
           ref={dotRef}
-          className="absolute top-1/3 -translate-y-1/2 -translate-x-1/2"
-          style={{ left: "50%", willChange: "left" }}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: "33%",
+            willChange: "transform",
+            transform: "translate3d(0, 0, 0)",
+          }}
         >
-          <div className="w-6 h-6 rounded-full bg-green-500 shadow-lg shadow-green-500/50 ring-2 ring-white/50" />
+          <div
+            className="w-6 h-6 rounded-full bg-green-500 shadow-lg shadow-green-500/50 ring-2 ring-white/50"
+            style={{ transform: "translate(-50%, -50%)" }}
+          />
         </div>
       </div>
     </>
