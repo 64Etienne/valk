@@ -119,23 +119,37 @@ HIPPUS:
 - Dominant frequency: ${payload.hippus.dominantFrequencyHz}Hz
 
 ${payload.voiceAnalysis ? `VOICE ANALYSIS (Reading French aloud):
-- Speech rate: ${payload.voiceAnalysis.speechRateWordsPerMin} words/min (normal French reading: 150-180 wpm)
+- Speech rate: ${payload.voiceAnalysis.speechRateWordsPerMin} words/min (measured over VOICED time only — prosodic pauses already excluded)
 - Total duration: ${payload.voiceAnalysis.totalDurationMs}ms
 - Voiced duration: ${payload.voiceAnalysis.voicedDurationMs}ms
 - Pause count: ${payload.voiceAnalysis.pauseCount}
 - Total pause time: ${payload.voiceAnalysis.pauseTotalMs}ms
-- Mean pause duration: ${payload.voiceAnalysis.meanPauseDurationMs}ms (normal: <250ms)
+- Mean pause duration: ${payload.voiceAnalysis.meanPauseDurationMs}ms
 - Spectral centroid: ${payload.voiceAnalysis.spectralCentroidMean}Hz
 - Spectral flatness: ${payload.voiceAnalysis.spectralFlatnessMean} (0=tonal, 1=noise; slurred speech → higher flatness)
 - MFCC mean: [${payload.voiceAnalysis.mfccMean.join(", ")}]
 - MFCC std: [${payload.voiceAnalysis.mfccStd.join(", ")}]
 - SNR: ${payload.voiceAnalysis.signalToNoiseRatio}dB
 Reference: Suffoletto et al. 2023 (J Studies Alcohol & Drugs, Stanford): 98% accuracy detecting BAC>0.08% from smartphone audio via SVM on MFCCs + spectral features.
+CAVEAT (MUST read before scoring): our implementation extracts aggregate MFCCs/spectral stats
+and hands them to an LLM — this is NOT the Suffoletto SVM pipeline. Treat voice as a SECONDARY
+signal, weight it below pursuit-gain + blink-rate. Only flag speech as impaired when multiple
+voice metrics co-move AND ocular metrics corroborate.
 
-READING PROTOCOL:
-- Corpus: "La bise et le soleil" (≈49-word phonetically balanced French reference, ISO standard) + 1 randomly selected tongue twister (~10 words) from a pool of 8.
-- Expected normal speech ratio (voiced / total recording): 50-70%. Below 30% suggests either (a) capture issue (mic failure, stopped early) OR (b) severe impairment causing long pauses/stutter.
-- Expected speech rate at normal reading: 140-170 wpm for the combined corpus. <110 wpm is suggestive of impairment.` : "VOICE ANALYSIS: Not available for this session."}
+READING PROTOCOL & PROSODIC PAUSE EXPECTATION:
+- Corpus: "La bise et le soleil" (≈49 words, phonetically balanced French reference, ISO) +
+  1 randomly selected tongue twister (~10 words).
+- The fable contains ~10 commas and ~3 periods. Faithful reading normally produces
+  10-18 prosodic pauses, each 150-450 ms (commas) to 400-800 ms (periods).
+- Therefore:
+  - Pause COUNT of 10-20 is EXPECTED and NOT a sign of impairment.
+  - Mean pause duration up to ~500 ms is normal prosody.
+  - Only flag as hesitation-impairment when: pause count >22 OR mean pause >700 ms
+    OR pauses clearly cluster mid-phrase (cannot be inferred from aggregate stats, so be cautious).
+- Voiced/total ratio: below 30% suggests capture issue (mic failed, stopped early) or
+  severe impairment. 40-65% is normal for a punctuated French reading.
+- Expected voiced-time speech rate: 140-180 wpm. <110 wpm on voiced time specifically is
+  suggestive (total-time wpm of the old schema is no longer sent).` : "VOICE ANALYSIS: Not available for this session."}
 
 Respond with a JSON object matching this schema:
 {

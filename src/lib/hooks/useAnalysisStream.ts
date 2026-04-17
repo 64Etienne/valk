@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { parseSSE } from "@/lib/streaming/sse";
 import { analysisResultSchema } from "@/lib/analysis/response-schema";
+import { getSessionId } from "@/lib/logger/logger";
 import type { AnalysisPayload, AnalysisResult } from "@/types";
 
 export type StreamPhase = "idle" | "streaming" | "done" | "error";
@@ -36,7 +37,13 @@ export function useAnalysisStream() {
       try {
         const resp = await fetch("/api/analyze", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // Tie the analyze request to the client's log session so the
+            // server can append the payload + Claude response to the same
+            // server-side audit trail retrievable via /api/logs/:sid.
+            "X-Session-Id": getSessionId(),
+          },
           body: JSON.stringify(payload),
           signal: controller.signal,
         });

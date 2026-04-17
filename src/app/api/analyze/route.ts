@@ -8,6 +8,7 @@ import {
   parsePartialJSON,
   extractJSONBlock,
 } from "@/lib/streaming/partial-json";
+import { appendEntries } from "@/lib/logger/server-store";
 
 export const maxDuration = 300;
 
@@ -124,11 +125,32 @@ export async function POST(request: NextRequest) {
     return sseErrorResponse("Trop de requêtes. Réessayez dans une minute.", 429);
   }
 
+  const sid = request.headers.get("x-session-id") || "anon";
+  const ua = request.headers.get("user-agent") || "";
+  const audit = (event: string, data?: unknown, level: string = "info") => {
+    appendEntries(sid, ua, "/api/analyze", [
+      { ts: 0, wallMs: Date.now(), level, event, data },
+    ]);
+  };
+
   const body = await request.json().catch(() => null);
-  if (!body) return sseErrorResponse("Payload JSON invalide.", 400);
+  if (!body) {
+    audit("analyze.body.invalid", { reason: "json parse failed" }, "error");
+    return sseErrorResponse("Payload JSON invalide.", 400);
+  }
 
   const parsed = payloadSchema.safeParse(body);
   if (!parsed.success) {
+    audit(
+      "analyze.payload.schema.miss",
+      {
+        issues: parsed.error.issues.slice(0, 10).map((i) => ({
+          path: i.path.join("."),
+          message: i.message,
+        })),
+      },
+      "error"
+    );
     return new Response(
       encodeSSE("error", {
         error: "Données invalides.",
@@ -140,6 +162,10 @@ export async function POST(request: NextRequest) {
       { status: 400, headers: { "Content-Type": "text/event-stream" } }
     );
   }
+
+  // Full feature-set audit — tied to the client's sessionId so every number
+  // the model sees ends up queryable via GET /api/logs/:sid.
+  audit("analyze.payload.parsed", parsed.data);
 
   const userPrompt = buildUserPrompt(
     parsed.data as Parameters<typeof buildUserPrompt>[0]
@@ -155,6 +181,7 @@ export async function POST(request: NextRequest) {
       let accumulatedText = "";
       let lastEmittedLen = 0;
 
+      const t0 = Date.now();
       try {
         const claudeStream = anthropic.messages.stream({
           model: "claude-sonnet-4-6",
@@ -163,6 +190,10 @@ export async function POST(request: NextRequest) {
           system: SYSTEM_PROMPT,
         });
 
+        audit("analyze.claude.start", {
+          model: "claude-sonnet-4-6",
+          promptLength: userPrompt.length,
+        });
         send("start", { ts: Date.now() });
 
         for await (const chunk of claudeStream) {
@@ -187,8 +218,17 @@ export async function POST(request: NextRequest) {
         }
 
         const finalMessage = await claudeStream.finalMessage();
+        const elapsedMs = Date.now() - t0;
+
+        audit("analyze.claude.finalMessage", {
+          elapsedMs,
+          stop_reason: finalMessage.stop_reason,
+          input_tokens: finalMessage.usage?.input_tokens,
+          output_tokens: finalMessage.usage?.output_tokens,
+        });
 
         if (finalMessage.stop_reason === "max_tokens") {
+          audit("analyze.error.max_tokens", { elapsedMs }, "error");
           send("error", {
             error: "Réponse IA tronquée (budget de tokens atteint). Réessayez.",
           });
@@ -198,10 +238,15 @@ export async function POST(request: NextRequest) {
 
         const finalText = finalMessage.content.find((b) => b.type === "text");
         if (!finalText || finalText.type !== "text") {
+          audit("analyze.error.no_text_block", { elapsedMs }, "error");
           send("error", { error: "Pas de contenu texte dans la réponse." });
           controller.close();
           return;
         }
+
+        // Persist the raw Claude response regardless of schema validity — the
+        // raw text is the most informative artefact when diagnosing mismatches.
+        audit("analyze.claude.rawText", { rawText: finalText.text });
 
         const jsonText = extractJSONBlock(finalText.text);
         const finalData = jsonText ? parsePartialJSON(jsonText) : null;
@@ -209,6 +254,17 @@ export async function POST(request: NextRequest) {
 
         if (!validated.success) {
           console.error("Claude response schema miss:", validated.error.issues);
+          audit(
+            "analyze.error.schema_miss",
+            {
+              elapsedMs,
+              issues: validated.error.issues.slice(0, 10).map((i) => ({
+                path: i.path.join("."),
+                message: i.message,
+              })),
+            },
+            "error"
+          );
           send("error", {
             error: "Réponse IA malformée. Réessayez.",
             issues: validated.error.issues.slice(0, 5).map((i) => ({
@@ -220,12 +276,17 @@ export async function POST(request: NextRequest) {
           return;
         }
 
+        audit("analyze.final", validated.data);
         send("final", validated.data);
         controller.close();
       } catch (err: unknown) {
         console.error("Streaming error:", err);
         const msg =
           err instanceof Error ? err.message : "Erreur pendant l'analyse.";
+        audit("analyze.error.exception", {
+          message: msg,
+          stack: err instanceof Error ? err.stack?.slice(0, 600) : undefined,
+        }, "error");
         send("error", { error: msg });
         controller.close();
       }

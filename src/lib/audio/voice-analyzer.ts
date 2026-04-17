@@ -120,8 +120,14 @@ export function analyzeVoice(
   const totalDurationMs = (samples.length / sampleRate) * 1000;
   const voicedDurationMs = voicedFrames * frameDurationMs;
 
+  // Speech rate is measured over VOICED time (actual talking), not total time.
+  // Otherwise prosodic pauses at commas/periods — which are normal in faithful
+  // reading of a punctuated French text — artificially depress wpm and get
+  // flagged as impairment. Suffoletto 2023 also normalises on voiced time.
+  // Fallback to totalDurationMs if voiced detection failed (very short clip).
+  const denomMs = voicedDurationMs > 1000 ? voicedDurationMs : totalDurationMs;
   const speechRateWordsPerMin =
-    totalDurationMs > 0 ? (expectedWords / totalDurationMs) * 60000 : 0;
+    denomMs > 0 ? (expectedWords / denomMs) * 60000 : 0;
 
   // SNR estimate
   const voicedRms = rmsValues.filter((r) => r >= adaptiveThreshold);
