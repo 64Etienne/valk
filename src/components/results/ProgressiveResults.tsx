@@ -10,7 +10,7 @@ import { Button } from "../ui/Button";
 import { Spinner } from "../ui/Spinner";
 import { RotateCcw } from "lucide-react";
 import Link from "next/link";
-import type { AnalysisResult } from "@/types";
+import type { AnalysisResult, CategoryScore } from "@/types";
 
 const CATEGORY_ORDER = ["alcohol", "fatigue", "substances"] as const;
 const CATEGORY_LABELS: Record<(typeof CATEGORY_ORDER)[number], string> = {
@@ -24,6 +24,28 @@ interface ProgressiveResultsProps {
   final: AnalysisResult | null;
   phase: "idle" | "streaming" | "done" | "error";
   error: string | null;
+}
+
+/**
+ * Verify that a partial category is SAFE TO RENDER — all fields that child
+ * components call `.length` or iterate over must be populated AS ARRAYS.
+ * Otherwise the partial JSON parser will hand us `{score: 42, observations: [...]}`
+ * without `limitations`/`alternativeExplanations` and CategoryCard's children
+ * crash with "Cannot read properties of undefined (reading 'length')".
+ */
+function isCategoryRenderable(
+  data: Partial<CategoryScore> | undefined
+): data is CategoryScore {
+  if (!data) return false;
+  if (typeof data.score !== "number") return false;
+  if (!data.confidence) return false;
+  if (typeof data.label !== "string") return false;
+  if (typeof data.scientificBasis !== "string") return false;
+  if (typeof data.confidenceExplanation !== "string") return false;
+  if (!Array.isArray(data.observations)) return false;
+  if (!Array.isArray(data.limitations)) return false;
+  if (!Array.isArray(data.alternativeExplanations)) return false;
+  return true;
 }
 
 export function ProgressiveResults({
@@ -59,7 +81,7 @@ export function ProgressiveResults({
 
   const hasAllCategoriesComplete =
     final !== null &&
-    CATEGORY_ORDER.every((c) => final.categories?.[c]?.score !== undefined);
+    CATEGORY_ORDER.every((c) => isCategoryRenderable(final.categories?.[c]));
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
@@ -85,13 +107,10 @@ export function ProgressiveResults({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {CATEGORY_ORDER.map((cat) => {
-          const data = display.categories?.[cat];
-          const isComplete =
-            data &&
-            typeof data.score === "number" &&
-            data.confidence &&
-            Array.isArray(data.observations);
-          return isComplete ? (
+          const data = display.categories?.[cat] as
+            | Partial<CategoryScore>
+            | undefined;
+          return isCategoryRenderable(data) ? (
             <CategoryCard key={cat} category={cat} data={data} />
           ) : (
             <CategoryCardSkeleton key={cat} label={CATEGORY_LABELS[cat]} />
