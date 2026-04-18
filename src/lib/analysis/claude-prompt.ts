@@ -129,8 +129,8 @@ BASELINE MEASUREMENTS (current session):
 - Pupil diameter: L=${payload.baseline.pupilDiameterMm.left}mm, R=${payload.baseline.pupilDiameterMm.right}mm
 - Pupil symmetry ratio: ${payload.baseline.pupilSymmetryRatio}${payload.baseline.pupilSymmetryRatio < 0.70 || payload.baseline.pupilSymmetryRatio > 1.30 ? " [WARNING: asymmetry >0.5mm — likely landmarking artifact, interpret pupil metrics cautiously]" : ""}
 - Eyelid aperture: L=${payload.baseline.eyelidApertureMm.left}mm, R=${payload.baseline.eyelidApertureMm.right}mm
-- Blink rate: ${payload.baseline.blinkRate} blinks/min [measured over ~5s — sample size too small for population comparison; interpret only as delta-from-baseline if available]
-- PERCLOS: ${(payload.baseline.perclos * 100).toFixed(1)}% [same caveat as blink rate]
+- Blink rate: ${payload.baseline.blinkRate} blinks/min ${payload.baseline.blinkRateActiveDurationMs !== undefined ? `(measured over ${(payload.baseline.blinkRateActiveDurationMs / 1000).toFixed(1)} s of active processing)` : ""}${payload.baseline.blinkRateReliable === false ? " [WARNING: active processing <20 s — sample size too small, treat as unreliable]" : ""}
+- PERCLOS: ${(payload.baseline.perclos * 100).toFixed(1)}%${payload.baseline.blinkRateReliable === false ? " [same <20 s caveat as blink rate]" : ""}
 
 LIGHT REFLEX:
 ${payload.lightReflex.constrictionAmplitudeMm === 0 ? `⚠️ PLR DATA UNAVAILABLE — screen flash overexposed the camera sensor OR phase skipped. DO NOT penalize.` : `- Constriction latency: ${payload.lightReflex.constrictionLatencyMs}ms

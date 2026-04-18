@@ -80,11 +80,36 @@ export class BlinkDetector {
     return { ear, isBlinking };
   }
 
-  getBlinkRate(): number {
+  /**
+   * Active duration in ms = sum of inter-frame gaps < 500 ms. Excludes long
+   * blackouts like phase_2_close (eyes intentionally shut, frames skipped by
+   * the extractor) that would otherwise inflate the blink-rate denominator.
+   */
+  getActiveDurationMs(): number {
     if (this.earHistory.length < 2) return 0;
-    const durationMs = this.earHistory[this.earHistory.length - 1].timeMs - this.earHistory[0].timeMs;
-    if (durationMs <= 0) return 0;
-    return (this.blinks.length / durationMs) * 60000;
+    let activeMs = 0;
+    const GAP_THRESHOLD = 500;
+    for (let i = 1; i < this.earHistory.length; i++) {
+      const dt = this.earHistory[i].timeMs - this.earHistory[i - 1].timeMs;
+      if (dt > 0 && dt < GAP_THRESHOLD) activeMs += dt;
+    }
+    return activeMs;
+  }
+
+  getBlinkRate(): number {
+    const activeMs = this.getActiveDurationMs();
+    if (activeMs <= 0) return 0;
+    return (this.blinks.length / activeMs) * 60000;
+  }
+
+  /**
+   * Reliability flag for blink-rate / PERCLOS. A minimum of 20 s of active
+   * processing is required for blink rate to be statistically meaningful
+   * (normal rate 12-20/min → 4-7 blinks expected in 20 s). Below this, the
+   * measurement is too sparse to compare to population norms.
+   */
+  getBlinkRateReliable(): boolean {
+    return this.getActiveDurationMs() >= 20_000 && this.earHistory.length >= 300;
   }
 
   getPERCLOS(): number {

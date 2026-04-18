@@ -34,6 +34,12 @@ export interface AnalysisPayload {
     eyelidApertureMm: { left: number; right: number };
     blinkRate: number;
     perclos: number;
+    // Phase 2.7 (valk-v3): window over which blinkRate is computed, excluding
+    // non-processed frames (e.g. phase_2_close when eyes are intentionally shut).
+    blinkRateActiveDurationMs?: number;
+    // Phase 2.7: true only if active duration ≥ 20 s — below that, the blink
+    // rate is a too-sparse measurement to compare to population norms.
+    blinkRateReliable?: boolean;
   };
   lightReflex: {
     constrictionLatencyMs: number;

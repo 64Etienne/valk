@@ -37,6 +37,8 @@ const payloadSchema = z.object({
     eyelidApertureMm: z.object({ left: z.number(), right: z.number() }),
     blinkRate: z.number(),
     perclos: z.number(),
+    blinkRateActiveDurationMs: z.number().optional(),
+    blinkRateReliable: z.boolean().optional(),
   }),
   lightReflex: z.object({
     constrictionLatencyMs: z.number(),

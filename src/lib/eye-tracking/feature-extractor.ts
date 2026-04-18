@@ -106,6 +106,8 @@ export class FeatureExtractor {
 
     const blinkRate = this.blinkDetector.getBlinkRate();
     const perclos = this.blinkDetector.getPERCLOS();
+    const blinkRateActiveDurationMs = this.blinkDetector.getActiveDurationMs();
+    const blinkRateReliable = this.blinkDetector.getBlinkRateReliable();
 
     const pursuitGain = this.nystagmusDetector.getSmoothPursuitGain();
     const saccadeCount = this.nystagmusDetector.getSaccadeCount();
@@ -138,6 +140,8 @@ export class FeatureExtractor {
         },
         blinkRate: Math.round(blinkRate * 10) / 10,
         perclos: Math.round(perclos * 1000) / 1000,
+        blinkRateActiveDurationMs,
+        blinkRateReliable,
       },
       lightReflex: {
         constrictionLatencyMs: plr.constrictionLatencyMs,
