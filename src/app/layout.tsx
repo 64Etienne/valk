@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ClientLogger } from "@/components/debug/ClientLogger";
+import { ExperimentalDisclaimer } from "@/components/common/ExperimentalDisclaimer";
 
 const inter = localFont({
   src: [
@@ -44,6 +45,7 @@ export default function RootLayout({
       <body className={`${inter.variable} antialiased min-h-screen`}>
         <ClientLogger />
         {children}
+        <ExperimentalDisclaimer />
         <ServiceWorkerRegister />
       </body>
     </html>
