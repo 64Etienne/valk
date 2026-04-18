@@ -26,6 +26,7 @@ import { unlockAudio } from "@/lib/audio/audio-context";
 import { useWakeLock } from "@/lib/hooks/useWakeLock";
 import { saveResult } from "@/lib/storage/session-result";
 import { PreflightGate } from "@/components/preflight/PreflightGate";
+import { BaselineRequiredModal } from "./BaselineRequiredModal";
 import {
   isDebugEnabled,
   createDebugRecorder,
@@ -83,6 +84,19 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
   const [context, setContext] = useState<UserContext | null>(null);
   const [faceDetected, setFaceDetected] = useState(false);
   const [faceLost, setFaceLost] = useState(false);
+  // Phase 1.3 (valk-v3): block analyze flow on mount if no baseline.
+  // In baseline mode, always allow (user is calibrating). In analyze mode,
+  // show modal until either the user opts to continue or navigates to /baseline.
+  const [baselineGateDismissed, setBaselineGateDismissed] = useState(false);
+  const [needsBaselineGate, setNeedsBaselineGate] = useState(false);
+  useEffect(() => {
+    if (mode !== "analyze") {
+      setNeedsBaselineGate(false);
+      return;
+    }
+    if (baselineGateDismissed) return;
+    if (loadBaseline() === null) setNeedsBaselineGate(true);
+  }, [mode, baselineGateDismissed]);
   const [phaseElapsed, setPhaseElapsed] = useState(0);
   const [phase3StartMs, setPhase3StartMs] = useState(0);
   const [eyesClosed, setEyesClosed] = useState(false);
@@ -393,6 +407,15 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
 
   return (
     <div className="relative min-h-screen bg-zinc-950">
+      {/* Phase 1.3 (valk-v3): mandatory modal on analyze without baseline. */}
+      {needsBaselineGate && (
+        <BaselineRequiredModal
+          onContinueWithoutBaseline={() => {
+            setBaselineGateDismissed(true);
+            setNeedsBaselineGate(false);
+          }}
+        />
+      )}
       <CameraPermissionGate
         isActive={camera.isActive}
         error={camera.error || mediapipe.error || null}
