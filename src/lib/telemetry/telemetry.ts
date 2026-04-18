@@ -14,7 +14,7 @@ export interface TelemetryEvent {
   pursuit_gain: number;
   blink_rate_per_min: number;
   perclos: number;
-  scleral_redness: number;
+  scleral_redness: number | null;
   alcohol_score: number;
   fatigue_score: number;
   substances_score: number;
@@ -78,7 +78,7 @@ export function buildTelemetryEvent(
     pursuit_gain: payload.pursuit.smoothPursuitGainRatio,
     blink_rate_per_min: payload.baseline.blinkRate,
     perclos: payload.baseline.perclos,
-    scleral_redness: payload.baseline.scleralRednessIndex,
+    scleral_redness: payload.baseline.scleralRednessIndex ?? null,
     alcohol_score: result.categories.alcohol.score,
     fatigue_score: result.categories.fatigue.score,
     substances_score: result.categories.substances.score,

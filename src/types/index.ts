@@ -28,9 +28,13 @@ export interface AnalysisPayload {
   baseline: {
     pupilDiameterMm: { left: number; right: number };
     pupilSymmetryRatio: number;
-    scleralColorLAB: { left: [number, number, number]; right: [number, number, number] };
-    scleralRednessIndex: number;
-    scleralYellownessIndex: number;
+    // Phase 0.3 (valk-v3): sclera color fields are no longer calibrated
+    // (no white reference on consumer webcam). Optional in wire format;
+    // the feature extractor may still emit them, but they are ignored by
+    // the prompt and scoring. Full removal in Phase 2.6.
+    scleralColorLAB?: { left: [number, number, number]; right: [number, number, number] };
+    scleralRednessIndex?: number;
+    scleralYellownessIndex?: number;
     eyelidApertureMm: { left: number; right: number };
     blinkRate: number;
     perclos: number;
@@ -51,7 +55,10 @@ export interface AnalysisPayload {
   pursuit: {
     smoothPursuitGainRatio: number;
     saccadeCount: number;
-    nystagmusClues: {
+    // Phase 0.3 (valk-v3): our phase_3 stimulus is a sinusoid, not the SFST
+    // HGN protocol — calling these fields "nystagmus clues" is scientifically
+    // inaccurate. Optional in wire format; legacy extractor still populates.
+    nystagmusClues?: {
       onsetBeforeMaxDeviation: { left: boolean; right: boolean };
       distinctAtMaxDeviation: { left: boolean; right: boolean };
       smoothPursuitFailure: { left: boolean; right: boolean };
@@ -96,7 +103,9 @@ export interface PersonalBaseline {
   perclos: number;
   pursuitGain: number;
   saccadeCount: number;
-  scleralRedness: number;
+  // Phase 0.3 (valk-v3): optional — sclera color is not calibrated on
+  // consumer webcam and will be removed entirely in Phase 2.6.
+  scleralRedness?: number;
   speechRateWpm?: number;
   pauseCount?: number;
   capturedAt: string;

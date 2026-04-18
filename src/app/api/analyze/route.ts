@@ -9,6 +9,10 @@ import {
   extractJSONBlock,
 } from "@/lib/streaming/partial-json";
 import { appendEntries } from "@/lib/logger/server-store";
+import {
+  checkQualityGates,
+  hasHardGateFailure,
+} from "@/lib/analysis/quality-gates";
 
 export const maxDuration = 300;
 
@@ -227,6 +231,35 @@ export async function POST(request: NextRequest) {
   // Full feature-set audit — tied to the client's sessionId so every number
   // the model sees ends up queryable via GET /api/logs/:sid.
   audit("analyze.payload.parsed", parsed.data);
+
+  // Phase 1.2 (valk-v3): quality gates. Refuse to call Claude if the capture
+  // is so degraded that any score would be meaningless. Return a structured
+  // SSE status so the client can render a dedicated "capture insufficient"
+  // screen rather than a fake verdict.
+  const qualityIssues = checkQualityGates(parsed.data);
+  if (hasHardGateFailure(qualityIssues)) {
+    audit("analyze.quality.refused", { issues: qualityIssues }, "warn");
+    await flushAudit();
+    return new Response(
+      encodeSSE("status", {
+        code: "quality_insufficient",
+        issues: qualityIssues,
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      }
+    );
+  }
+  if (qualityIssues.length > 0) {
+    // Soft issues: let scoring proceed but log them for audit + UI
+    // will still display as data-quality warnings.
+    audit("analyze.quality.soft_issues", { issues: qualityIssues });
+  }
 
   const userPrompt = buildUserPrompt(
     parsed.data as Parameters<typeof buildUserPrompt>[0]

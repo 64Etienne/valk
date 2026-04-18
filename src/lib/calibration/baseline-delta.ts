@@ -6,7 +6,9 @@ export interface BaselineDelta {
   perclosDelta: number;
   pursuitGainDelta: number;
   saccadeCountDelta: number;
-  scleralRednessDelta: number;
+  // null when either side lacks the (optional) scleral redness index
+  // (Phase 0.3 valk-v3 made these fields optional).
+  scleralRednessDelta: number | null;
   speechRateDeltaWpm: number | null;
   pauseCountDelta: number | null;
 }
@@ -32,8 +34,11 @@ export function computeBaselineDelta(
     saccadeCountDelta:
       session.pursuit.saccadeCount - baseline.pursuit.saccadeCount,
     scleralRednessDelta:
-      session.baseline.scleralRednessIndex -
-      baseline.baseline.scleralRednessIndex,
+      session.baseline.scleralRednessIndex !== undefined &&
+      baseline.baseline.scleralRednessIndex !== undefined
+        ? session.baseline.scleralRednessIndex -
+          baseline.baseline.scleralRednessIndex
+        : null,
     speechRateDeltaWpm:
       session.voiceAnalysis && baseline.voiceAnalysis
         ? session.voiceAnalysis.speechRateWordsPerMin -

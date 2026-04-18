@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ProgressiveResults } from "@/components/results/ProgressiveResults";
+import { QualityInsufficientBanner } from "@/components/results/QualityInsufficientBanner";
 import { useAnalysisStream } from "@/lib/hooks/useAnalysisStream";
 import {
   loadResult,
@@ -100,12 +101,21 @@ export default function ResultsPage() {
   }
 
   if (mode === "streaming") {
+    // Phase 1.2 (valk-v3): if the server refused to score because of hard
+    // quality gates, render the dedicated banner instead of a fake verdict.
+    if (stream.phase === "quality_insufficient" && stream.qualityIssues) {
+      return (
+        <div className="min-h-screen bg-zinc-950 py-8">
+          <QualityInsufficientBanner issues={stream.qualityIssues} />
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-zinc-950">
         <ProgressiveResults
           partial={stream.partial}
           final={stream.final}
-          phase={stream.phase}
+          phase={stream.phase === "quality_insufficient" ? "error" : stream.phase}
           error={stream.error}
         />
       </div>

@@ -6,13 +6,26 @@ import { analysisResultSchema } from "@/lib/analysis/response-schema";
 import { getSessionId } from "@/lib/logger/logger";
 import type { AnalysisPayload, AnalysisResult } from "@/types";
 
-export type StreamPhase = "idle" | "streaming" | "done" | "error";
+export type StreamPhase =
+  | "idle"
+  | "streaming"
+  | "done"
+  | "error"
+  | "quality_insufficient";
+
+export interface QualityIssue {
+  gate: string;
+  measuredValue: number | string;
+  threshold: number | string;
+  humanReason: string;
+}
 
 export interface UseAnalysisStreamState {
   partial: Partial<AnalysisResult> | null;
   final: AnalysisResult | null;
   phase: StreamPhase;
   error: string | null;
+  qualityIssues: QualityIssue[] | null;
 }
 
 const TIMEOUT_MS = 120_000;
@@ -23,12 +36,19 @@ export function useAnalysisStream() {
     final: null,
     phase: "idle",
     error: null,
+    qualityIssues: null,
   });
   const abortRef = useRef<AbortController | null>(null);
 
   const analyze = useCallback(
     async (payload: AnalysisPayload): Promise<AnalysisResult | null> => {
-      setState({ partial: null, final: null, phase: "streaming", error: null });
+      setState({
+        partial: null,
+        final: null,
+        phase: "streaming",
+        error: null,
+        qualityIssues: null,
+      });
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -79,6 +99,7 @@ export function useAnalysisStream() {
                   final: validated.data,
                   phase: "done",
                   error: null,
+                  qualityIssues: null,
                 });
               } else {
                 setState((s) => ({
@@ -94,6 +115,21 @@ export function useAnalysisStream() {
                 phase: "error",
                 error: errData.error || "Erreur pendant l'analyse.",
               }));
+            } else if (evt.event === "status") {
+              // Phase 1.2 (valk-v3): server refused to score due to hard
+              // quality gates. Client renders a dedicated screen instead
+              // of a fake verdict.
+              const statusData = evt.data as {
+                code?: string;
+                issues?: QualityIssue[];
+              };
+              if (statusData.code === "quality_insufficient") {
+                setState((s) => ({
+                  ...s,
+                  phase: "quality_insufficient",
+                  qualityIssues: statusData.issues ?? [],
+                }));
+              }
             }
           }
         }
