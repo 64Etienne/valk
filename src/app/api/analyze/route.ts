@@ -14,16 +14,26 @@ export const maxDuration = 300;
 
 const anthropic = new Anthropic();
 
+// Phase 0.3 (valk-v3) : scleral color LAB + nystagmusClues rendus optionnels.
+// Raison : ces champs sont calculés par le pipeline existant mais :
+//   - sclera color n'est pas calibrée (pas de référence colorimétrique, AGC/WB iPhone
+//     détruit le signal) → retirée du prompt en Phase 0.1, ignorée par le scoring
+//   - nystagmusClues vient d'un stimulus sinusoïdal, pas du protocole HGN SFST
+//     → ne peut pas porter ce nom, retirée du prompt en Phase 0.1
+// Retrait complet du pipeline d'extraction prévu en Phase 2.6.
+// En attendant, on accepte ces champs pour back-compat mais on ne les exploite plus.
 const payloadSchema = z.object({
   baseline: z.object({
     pupilDiameterMm: z.object({ left: z.number(), right: z.number() }),
     pupilSymmetryRatio: z.number(),
-    scleralColorLAB: z.object({
-      left: z.tuple([z.number(), z.number(), z.number()]),
-      right: z.tuple([z.number(), z.number(), z.number()]),
-    }),
-    scleralRednessIndex: z.number(),
-    scleralYellownessIndex: z.number(),
+    scleralColorLAB: z
+      .object({
+        left: z.tuple([z.number(), z.number(), z.number()]),
+        right: z.tuple([z.number(), z.number(), z.number()]),
+      })
+      .optional(),
+    scleralRednessIndex: z.number().optional(),
+    scleralYellownessIndex: z.number().optional(),
     eyelidApertureMm: z.object({ left: z.number(), right: z.number() }),
     blinkRate: z.number(),
     perclos: z.number(),
@@ -40,20 +50,22 @@ const payloadSchema = z.object({
   pursuit: z.object({
     smoothPursuitGainRatio: z.number(),
     saccadeCount: z.number(),
-    nystagmusClues: z.object({
-      onsetBeforeMaxDeviation: z.object({
-        left: z.boolean(),
-        right: z.boolean(),
-      }),
-      distinctAtMaxDeviation: z.object({
-        left: z.boolean(),
-        right: z.boolean(),
-      }),
-      smoothPursuitFailure: z.object({
-        left: z.boolean(),
-        right: z.boolean(),
-      }),
-    }),
+    nystagmusClues: z
+      .object({
+        onsetBeforeMaxDeviation: z.object({
+          left: z.boolean(),
+          right: z.boolean(),
+        }),
+        distinctAtMaxDeviation: z.object({
+          left: z.boolean(),
+          right: z.boolean(),
+        }),
+        smoothPursuitFailure: z.object({
+          left: z.boolean(),
+          right: z.boolean(),
+        }),
+      })
+      .optional(),
     irisPositionTimeSeries: z.array(
       z.object({ timeMs: z.number(), x: z.number(), y: z.number() })
     ),
