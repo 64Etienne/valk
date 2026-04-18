@@ -1,6 +1,6 @@
 "use client";
 
-import { Car, AlertTriangle, XCircle } from "lucide-react";
+import { CheckCircle2, Info, AlertTriangle, XCircle } from "lucide-react";
 import { computeVerdict } from "@/lib/analysis/verdict";
 import type { AnalysisResult } from "@/types";
 
@@ -9,22 +9,28 @@ interface VerdictBannerProps {
 }
 
 const STYLE: Record<
-  "green" | "yellow" | "red",
-  { bg: string; border: string; text: string; icon: typeof Car }
+  "normal" | "mild" | "moderate" | "marked",
+  { bg: string; border: string; text: string; icon: typeof Info }
 > = {
-  green: {
+  normal: {
     bg: "bg-emerald-950/40",
     border: "border-emerald-500/50",
     text: "text-emerald-300",
-    icon: Car,
+    icon: CheckCircle2,
   },
-  yellow: {
+  mild: {
+    bg: "bg-sky-950/40",
+    border: "border-sky-500/50",
+    text: "text-sky-300",
+    icon: Info,
+  },
+  moderate: {
     bg: "bg-amber-950/40",
     border: "border-amber-500/50",
     text: "text-amber-300",
     icon: AlertTriangle,
   },
-  red: {
+  marked: {
     bg: "bg-red-950/50",
     border: "border-red-500/60",
     text: "text-red-300",
@@ -36,6 +42,8 @@ export function VerdictBanner({ result }: VerdictBannerProps) {
   const verdict = computeVerdict(result);
   const s = STYLE[verdict.level];
   const Icon = s.icon;
+  const showStrongDisclaimer =
+    verdict.level === "moderate" || verdict.level === "marked";
 
   return (
     <div className={`rounded-2xl border-2 p-6 ${s.bg} ${s.border}`}>
@@ -46,34 +54,20 @@ export function VerdictBanner({ result }: VerdictBannerProps) {
           <p className="text-zinc-300 text-sm mt-2">{verdict.detail}</p>
           {verdict.reducedConfidence && (
             <p className="text-zinc-400 text-xs mt-3 italic">
-              ⚠ Qualité de capture faible — ce verdict doit être interprété avec prudence.
+              ⚠ Qualité de capture faible — l&apos;interprétation est à prendre avec prudence.
             </p>
           )}
         </div>
       </div>
-      {verdict.level === "red" && (
-        <div className="mt-5 pt-5 border-t border-red-500/30">
-          <p className="text-zinc-400 text-xs mb-2">
-            Rappel : cet outil n&apos;est pas un éthylotest, n&apos;est pas un
-            dispositif médical, et n&apos;a aucune valeur légale. Il ne
-            remplace pas ton jugement ni celui d&apos;un professionnel.
+      {showStrongDisclaimer && (
+        <div className="mt-5 pt-5 border-t border-zinc-700/50">
+          <p className="text-zinc-300 text-xs leading-relaxed">
+            <strong>Rappel important.</strong> Cet outil est expérimental. Ce n&apos;est
+            ni un éthylotest, ni un test clinique, ni un substitut à l&apos;un ou à
+            l&apos;autre. Il ne peut pas déterminer ta capacité à conduire. Si tu as
+            consommé de l&apos;alcool, même un peu, <strong>ne conduis pas</strong> —
+            quel que soit le résultat affiché ici.
           </p>
-          <div className="flex gap-2 flex-wrap">
-            <a
-              href="https://m.uber.com/"
-              target="_blank"
-              rel="noopener"
-              className="flex-1 text-center bg-red-500 hover:bg-red-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
-            >
-              Appeler un Uber
-            </a>
-            <a
-              href="tel:3117"
-              className="flex-1 text-center bg-zinc-800 hover:bg-zinc-700 text-zinc-100 text-sm font-medium py-2 px-4 rounded-lg transition-colors"
-            >
-              Appeler un proche
-            </a>
-          </div>
         </div>
       )}
     </div>

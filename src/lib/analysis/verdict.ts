@@ -1,79 +1,85 @@
 import type { AnalysisResult } from "@/types";
 
-export type VerdictLevel = "green" | "yellow" | "red";
+export type VerdictLevel = "normal" | "mild" | "moderate" | "marked";
 
 export interface Verdict {
   level: VerdictLevel;
   headline: string;
   detail: string;
   reducedConfidence: boolean;
-  dominantFactor: "alcohol" | "fatigue" | "substances" | "combined" | null;
+  dominantIndicator: "oculomotor" | "arousal" | "motor_speech" | "combined" | null;
 }
 
 /**
- * Map 3-category scores to a driving-fitness verdict.
- * Thresholds tuned for "leaving a bar":
- *   - red if alcohol/substances ≥ 60 (≈ BAC > 0.04-0.05% territory)
- *   - red on severe fatigue (≥ 75) alone
- *   - red on combined moderate alcohol + moderate fatigue
- * Deliberately conservative: prefer false-positive red over false-negative green.
+ * Map 3-indicator deviation scores to a qualitative DEVIATION level.
+ *
+ * No driving-fitness verdict, no BAC estimate, no "drive / don't drive" text.
+ * The output describes *how much the current capture deviates from what would
+ * be expected for a rested, sober adult* — nothing more. Interpretation is
+ * left to the user + the Claude narrative that accompanies this verdict.
+ *
+ * The three backend keys (`alcohol` / `fatigue` / `substances`) are legacy
+ * names that we now interpret as:
+ *   - alcohol     → oculomotor deviation indicator
+ *   - fatigue     → arousal / fatigue indicator
+ *   - substances  → motor / speech deviation indicator
+ *
+ * See docs/superpowers/plans/valk-v3/02-product-repositioning.md for the
+ * rationale for this retitling.
  */
 export function computeVerdict(result: AnalysisResult): Verdict {
   const { alcohol, fatigue, substances } = result.categories;
-  const a = alcohol.score;
-  const f = fatigue.score;
-  const s = substances.score;
+  const oc = alcohol.score;
+  const ar = fatigue.score;
+  const ms = substances.score;
   const reducedConfidence = result.dataQuality.overallQuality === "poor";
+  const max = Math.max(oc, ar, ms);
+  const dominantIndicator: Verdict["dominantIndicator"] =
+    max === 0
+      ? null
+      : oc === max
+        ? "oculomotor"
+        : ar === max
+          ? "arousal"
+          : "motor_speech";
 
-  if (a >= 60 || s >= 60) {
+  if (max >= 76) {
     return {
-      level: "red",
-      headline: "NE CONDUIS PAS",
+      level: "marked",
+      headline: "Déviation marquée",
       detail:
-        "Les indicateurs suggèrent une altération significative. Appelle un Uber ou un proche.",
+        "Un ou plusieurs indicateurs s'écartent nettement des valeurs attendues. Ce n'est pas un verdict médical — lis les observations détaillées et considère les explications alternatives. Si tu as bu, ne conduis pas.",
       reducedConfidence,
-      dominantFactor: a >= s ? "alcohol" : "substances",
+      dominantIndicator,
     };
   }
-  if (f >= 75) {
+  if (max >= 51) {
     return {
-      level: "red",
-      headline: "NE CONDUIS PAS",
+      level: "moderate",
+      headline: "Déviation modérée",
       detail:
-        "Fatigue élevée détectée. Le risque d'endormissement au volant est important.",
+        "Certains indicateurs s'écartent des valeurs attendues. Regarde les observations détaillées pour comprendre lesquels. Si tu as consommé de l'alcool, ne conduis pas.",
       reducedConfidence,
-      dominantFactor: "fatigue",
+      dominantIndicator,
     };
   }
-  if (a >= 40 && f >= 40) {
+  if (max >= 26) {
     return {
-      level: "red",
-      headline: "NE CONDUIS PAS",
+      level: "mild",
+      headline: "Déviation légère",
       detail:
-        "Alcool modéré + fatigue modérée = risque cumulé élevé. Ne prends pas le volant.",
+        "Les indicateurs sont globalement dans les plages attendues avec quelques signaux intermédiaires. Capture de meilleure qualité ou baseline personnelle recommandée pour plus de précision.",
       reducedConfidence,
-      dominantFactor: "combined",
-    };
-  }
-
-  if (a >= 25 || f >= 35 || s >= 25) {
-    return {
-      level: "yellow",
-      headline: "PRUDENCE — attends 30 min",
-      detail:
-        "Les indicateurs sont borderline. Attends un peu, bois de l'eau, et refais le test avant de conduire.",
-      reducedConfidence,
-      dominantFactor:
-        a >= Math.max(f, s) ? "alcohol" : f >= s ? "fatigue" : "substances",
+      dominantIndicator,
     };
   }
 
   return {
-    level: "green",
-    headline: "OK POUR CONDUIRE",
+    level: "normal",
+    headline: "Indicateurs dans les plages attendues",
     detail:
-      "Aucun indicateur d'altération significative détecté. Conduis prudemment.",
+      "Aucune déviation significative détectée par rapport aux valeurs attendues. Ce test ne remplace pas un éthylotest et n'est pas un verdict de capacité à conduire.",
     reducedConfidence,
-    dominantFactor: null,
+    dominantIndicator: null,
   };
 }
