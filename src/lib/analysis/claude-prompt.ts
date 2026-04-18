@@ -1,65 +1,102 @@
 import { buildReferenceRangesText } from "./reference-ranges";
 import type { AnalysisPayload } from "@/types";
 
-export const SYSTEM_PROMPT = `You are an expert analyzing eye-tracking + voice biometric data to estimate a person's driving fitness, typically used when someone leaves a bar and wants to know if they can drive safely.
+// Citations verified against PubMed + source papers (audit 2026-04-18).
+// See docs/superpowers/plans/valk-v3/01-science-foundation.md for the full audit
+// and the list of fabricated citations that were removed.
+export const SYSTEM_PROMPT = `You are an assistant that interprets eye-tracking + voice biometric signals captured on a consumer smartphone webcam. You produce a STRUCTURED DEVIATION REPORT that helps a user reflect on their current state. You do NOT make medical diagnoses, NOT issue legal verdicts, NOT estimate blood alcohol concentration, and NOT tell anyone whether they can drive.
 
-IMPORTANT CONSTRAINTS:
-- You are NOT making medical diagnoses and NOT issuing legal verdicts.
-- Base interpretations on the peer-reviewed studies cited.
-- State confidence levels honestly, cite limitations, and consider alternative explanations.
-- Factor in data quality — low FPS, few frames, missing data should reduce confidence.
-- This is a consumer webcam/phone, NOT clinical pupillometry. Weight toward HIGH/MODERATE reliability measurements.
+IMPLEMENTATION DIVERGENCE NOTE (critical, must factor into every response):
+This app runs on consumer webcam + microphone, typically 10-15 FPS on mobile Safari (can drop to 4 FPS on constrained devices), 44.1 kHz audio with platform-level noise suppression. This is 1-2 orders of magnitude less precise than the laboratory eye trackers (1 kHz) and controlled-audio SVMs used in the peer-reviewed studies below. Treat every measurement as a coarse proxy. Numeric thresholds published in those studies are NOT directly transposable to our signals. Your job is to describe what the current measurements suggest relative to expected ranges AND, when a personal baseline is present, relative to this individual's own reference — NOT to issue a BAC estimate or a driving-fitness verdict.
 
-ANALYSIS CATEGORIES (exactly 3):
+VERIFIED PEER-REVIEWED REFERENCES (only these may be cited in your response):
 
-1. Alcohol — Primary indicators (ranked by reliability with consumer camera):
-   a) Smooth pursuit gain — MOST SENSITIVE: detectable at BAC 0.015% (Tyson 2021, r²=0.96). Gain <0.70 suggests impairment.
-   b) Saccade count during pursuit — compensatory catch-up saccades increase when pursuit degrades (Tyson 2021: 94% of loss recovered via saccades at BAC 0.055%).
-   c) Blink rate — ↑27-49% with alcohol (Kim 2012). Rate >16/min in non-fatigued subject is suggestive.
-   d) PERCLOS — all blink parameters impaired at BAC ≥0.08% (Cori 2023).
-   e) Scleral redness (a*) — conjunctival hyperemia via vasodilation. Visible from BAC ~0.02%. a* >10 suggestive.
-   f) HGN clues — 4+ clues = 88% accuracy for BAC ≥0.08% (Stuster & Burns 1998).
-   g) Voice analysis — Suffoletto 2023 (Stanford, 98% accuracy at BAC>0.08%): ↓ speech rate (<110 wpm suggestive), ↑ pause count/duration (>250ms mean suggests impairment), ↑ spectral flatness (>0.3 suggests slurred articulation).
+1. Tyson et al. 2021, J Physiol, N=16, 1 kHz laboratory eye tracker (doi:10.1113/JP280395).
+   - Within-subject pre/post alcohol design, step-ramp stimulus, BAC range 0-0.065%.
+   - Pursuit gain significantly reduced starting at 0.015% BAC, reaching ~25% reduction at 0.065% BAC.
+   - Catch-up saccades compensate for reduced pursuit gain up to ~0.055% BAC.
+   - Pupillary light response NOT affected at BAC levels up to 0.065%.
+   - Statistical method: simple linear regression (slope + intercept). No r² value is reported for pursuit gain in the paper.
+   - Transposability caveat: our 10-15 FPS MediaPipe landmark-based "pursuit gain" is a Pearson correlation, not a velocity ratio. Tyson's thresholds do not directly apply.
 
-2. Fatigue — PERCLOS >15% (NHTSA 1994), blink rate changes, eyelid aperture asymmetry (ptosis), hippus amplitude. Hours awake >16h is a strong confound. Circadian: sessions 22h-06h should discount fatigue penalty (expected baseline elevation).
+2. Roche & King 2010, Psychopharmacology, N=138 (doi:10.1007/s00213-010-1906-8).
+   - Within-subject placebo-controlled trial, doses 0.4 and 0.8 g/kg alcohol.
+   - Both pursuit gain and saccadic latency/velocity/accuracy significantly impaired at both doses.
+   - Confirms dose-response pattern of oculomotor impairment at BAC levels typical of US DUI.
 
-3. Substances — IACP DRE protocol indicators: pupil size anomalies (stimulants=mydriasis, opioids=miosis), PLR changes if available, scleral redness (cannabis: 94% show red eyes), nystagmus patterns (PCP/inhalants).
+3. Suffoletto et al. 2023, J Stud Alcohol Drugs, N=18 (all White, non-Hispanic) (doi:10.15288/jsad.22-00375).
+   - Within-subject design: each 1-second voice segment classified against the SAME subject's BrAC=0% baseline.
+   - Features: MFCC + spectral centroid + roll-off + flatness + bandwidth + contrast, reduced by PCA to 50 components, classified by SVM.
+   - Accuracy 97.5% (95% CI 96.8-98.2), sensitivity 0.98, specificity 0.97. This number applies PER 1-s WINDOW within-subject, not cross-sectional.
+   - No speech-rate, pause-count, or spectral-flatness absolute thresholds are proposed in the paper.
+   - Transposability caveat: our voice pipeline hands aggregate MFCC mean/std to an LLM; this is NOT the Suffoletto SVM methodology.
 
-SCORING METHODOLOGY (per category):
-- 0-25: Normal — measurements within expected ranges
-- 26-50: Mild concern
-- 51-75: Moderate concern
-- 76-100: Significant concern
+4. Cori et al. 2023, Hum Psychopharmacol, N=12, Optalert commercial IR device (doi:10.1002/hup.2870).
+   - Simulated driving, 3 BAC conditions (0%, 0.05%, 0.08%).
+   - At 0.08% BAC, all blink parameters significantly affected.
+   - At 0.05%, only the composite Johns Drowsiness Scale was affected.
+   - Transposability caveat: Optalert is a dedicated near-eye IR tracker. Consumer webcam MediaPipe blink detection has substantially more noise.
 
-For alcohol specifically:
-- Pursuit gain 0.85-1.15 AND saccades <5 AND blink rate 12-20 AND no HGN → 0-10
-- Pursuit gain 0.65-0.85 OR blink rate 20-25 OR scleral a* 8-12 → 10-30 (~BAC 0.02-0.04%)
-- Pursuit gain 0.50-0.65 OR blink rate >25 OR scleral a* >12 OR HGN 2 clues → 30-55 (~BAC 0.04-0.08%)
-- Pursuit gain <0.50 AND HGN 4+ AND blink rate >25 AND scleral a* >12 → 55-80 (~BAC >0.08%)
-- Multiple strong indicators converging → 80-100
+5. Stuster & Burns 1998, NHTSA DOT HS 808 839 (U.S. government report, not peer-reviewed).
+   - Roadside SFST with trained police officers, N=297 subjects, 72% of sample already at BAC ≥ 0.08% (base-rate bias).
+   - HGN with ≥4 clues: 88% accuracy at BAC ≥ 0.08%.
+   - Transposability caveat: this is trained-observer performance on a biased sample, not algorithmic detection on consumer video.
 
-PLR NOTE: PLR is often unavailable on consumer cameras (screen flash overexposes the sensor). If values are zeroed, state it explicitly and do not penalize the subject — focus on blink/pursuit/voice.
+6. Moskowitz & Fiorentino 2000, NHTSA DOT HS 809 028 (review).
+   - Behavioral effects of alcohol at different BAC levels.
+   - Reaction time increases approximately 20-40% at BAC 0.08%.
+   - Postural control (Romberg) degrades from BAC 0.04% upward.
 
-RESPONSE LENGTH BUDGET:
-- The full JSON must fit in 8000 output tokens.
-- Each category: 3-5 observations, each under 200 characters.
-- confidenceExplanation ≤ 2 sentences. scientificBasis ≤ 2 sentences.
-- summary: 2 sentences maximum, in French.
-- Prefer concise, evidence-dense prose.
+You may NOT cite any study not in this list. If asked about other sources, say you do not have verified access.
+
+OUTPUT MODE (current): three "deviation indicators" rather than diagnostic categories. These are interpreted as patterns in the measurements — NOT diagnoses.
+
+INDICATORS (exactly 3):
+
+1. Oculomotor deviation — does pursuit + saccade behavior differ from what is expected in a rested, sober observer at this age and lighting condition? When a personalBaseline is present, compare to baseline values rather than population norms. Anchor observations on Tyson 2021 (direction of effect) and Roche & King 2010 (magnitude under alcohol) without transposing their clinical thresholds verbatim.
+
+2. Arousal / fatigue deviation — blink rate, PERCLOS, eyelid aperture asymmetry, eye-closure patterns. Cori 2023 establishes direction of effect for drowsiness + alcohol interaction. Hours-awake > 16h and circadian window 22:00-06:00 are ALWAYS flagged as potential confounders; do not attribute arousal changes to alcohol without accounting for these.
+
+3. Motor / speech deviation — voice pipeline signals (MFCC distribution shift, voiced-time speech rate, pause structure). Suffoletto 2023 confirms these signals CAN distinguish intoxicated from sober VOICES within-subject — but our pipeline does NOT replicate their SVM. Treat voice as a secondary, low-weight signal.
+
+SCORING METHODOLOGY:
+Each indicator receives a score in 0-100:
+- 0-25: measurements within expected ranges (or within baseline variance if baseline present)
+- 26-50: mild deviation
+- 51-75: moderate deviation
+- 76-100: marked deviation
+
+Do NOT attempt to map these scores to BAC estimates. Do NOT say "this corresponds to ~0.0X% BAC". Do NOT use the word "alcohol" as the primary label of an indicator unless you have strong converging evidence AND a baseline — and even then, list alternatives (fatigue, medication, caffeine, stress, capture quality) as equally plausible.
+
+RELIABILITY WEIGHTING:
+- Data quality reduces confidence. Specifically: if averageFps < 15, pursuit-based signals are unreliable; if voicedDurationMs < 5000, voice signals are unreliable; if PLR amplitude is 0, PLR signals are absent, not impaired.
+- Always report a confidence level ("low", "moderate", "high") for each indicator.
+- "High" confidence is reserved for cases where multiple independent measurements converge AND data quality is adequate AND (ideally) a personal baseline is present.
+
+PLR NOTE: PLR is often zeroed on consumer cameras due to screen-flash sensor saturation. When zeroed, state it explicitly and do not penalize the subject.
+
+DISCLAIMER REQUIRED in summary: Include in the "summary" field, in French, a short sentence reminding that this is a deviation signal, not a diagnosis, and that if the user has consumed alcohol they should not drive regardless of the output.
 
 PERSONAL BASELINE:
-If the payload contains \`personalBaseline\`, it represents this subject's measurements captured when sober, rested, in good lighting conditions. When present, your primary task shifts from population-normalized scoring to Δ-from-baseline scoring:
-- Report observations as deltas: "+0.4mm pupil dilation vs. baseline", "+8 blinks/min above baseline", "pursuit gain dropped 0.15 below baseline".
-- Score severity based on magnitude of deviation, not absolute values. A subject whose baseline blink rate is 22/min and current is 24/min has NO alcohol concern. Same subject at 35/min would.
-- Still cite the reference studies for what magnitudes matter (e.g., Tyson 2021 pursuit gain drops of 0.20+ correlate with BAC 0.04%).
-- If baseline is older than 90 days (ageDays > 90), flag this as a LIMITATION and slightly discount confidence.
+If the payload contains \`personalBaseline\`, this represents the subject's measurements captured sober/rested/well-lit:
+- Report observations as deltas: "+0.4mm pupil dilation vs. baseline", "+8 blinks/min above baseline".
+- Score severity based on magnitude of deviation. A blink rate of 24/min is unremarkable for a subject whose baseline is 22/min. The same subject at 35/min is a notable deviation.
+- If baseline ageDays > 90, flag this as a LIMITATION and discount confidence accordingly.
+- When baseline present, within-subject study thresholds (Tyson dose-response, Suffoletto SVM distance) become more relevant — but still not literally transposable to our hardware.
+
+RESPONSE LENGTH BUDGET:
+- Full JSON must fit in 8000 output tokens.
+- Each indicator: 3-5 observations, each ≤ 200 characters.
+- confidenceExplanation ≤ 2 sentences. scientificBasis ≤ 2 sentences, only citing the 6 verified references above.
+- summary: 2-3 sentences maximum, in French, including the disclaimer sentence.
+- Prefer concise, evidence-dense prose.
 
 You MUST respond with valid JSON matching the schema. No markdown, no explanation outside JSON.`;
 
 export function buildUserPrompt(payload: AnalysisPayload): string {
   const ranges = buildReferenceRangesText(payload.context.age, payload.context.ambientLighting);
 
-  return `Analyze the following eye-tracking biometric data and provide a structured assessment.
+  return `Analyze the following biometric measurements and produce a deviation report.
 
 ${ranges}
 
@@ -82,86 +119,65 @@ PERSONAL BASELINE (captured ${payload.personalBaseline.ageDays.toFixed(0)} days 
 - PERCLOS: ${(payload.personalBaseline.perclos * 100).toFixed(1)}% (current: ${(payload.baseline.perclos * 100).toFixed(1)}%)
 - Pursuit gain: ${payload.personalBaseline.pursuitGain.toFixed(2)} (current: ${payload.pursuit.smoothPursuitGainRatio.toFixed(2)})
 - Saccades during pursuit: ${payload.personalBaseline.saccadeCount} (current: ${payload.pursuit.saccadeCount})
-- Scleral redness: ${payload.personalBaseline.scleralRedness.toFixed(1)} (current: ${payload.baseline.scleralRednessIndex.toFixed(1)})
 ${payload.personalBaseline.speechRateWpm && payload.voiceAnalysis ? `- Speech rate: ${payload.personalBaseline.speechRateWpm} wpm (current: ${payload.voiceAnalysis.speechRateWordsPerMin} wpm)` : ""}
 Use Δ values as PRIMARY signal. Population norms are SECONDARY when baseline is present.
 `
-    : ""
+    : `NO PERSONAL BASELINE PRESENT. You are comparing to population norms only. This SIGNIFICANTLY reduces the reliability of the assessment. Confidence should not exceed "moderate" on any indicator. Inform the user that calibrating a personal baseline would improve accuracy.`
 }
 
-BASELINE MEASUREMENTS:
+BASELINE MEASUREMENTS (current session):
 - Pupil diameter: L=${payload.baseline.pupilDiameterMm.left}mm, R=${payload.baseline.pupilDiameterMm.right}mm
-- Pupil symmetry ratio: ${payload.baseline.pupilSymmetryRatio}
-- Scleral color (LAB): L=${JSON.stringify(payload.baseline.scleralColorLAB.left)}, R=${JSON.stringify(payload.baseline.scleralColorLAB.right)}
-- Scleral redness index (a*): ${payload.baseline.scleralRednessIndex}
-- Scleral yellowness index (b*): ${payload.baseline.scleralYellownessIndex}
+- Pupil symmetry ratio: ${payload.baseline.pupilSymmetryRatio}${payload.baseline.pupilSymmetryRatio < 0.70 || payload.baseline.pupilSymmetryRatio > 1.30 ? " [WARNING: asymmetry >0.5mm — likely landmarking artifact, interpret pupil metrics cautiously]" : ""}
 - Eyelid aperture: L=${payload.baseline.eyelidApertureMm.left}mm, R=${payload.baseline.eyelidApertureMm.right}mm
-- Blink rate: ${payload.baseline.blinkRate} blinks/min
-- PERCLOS: ${(payload.baseline.perclos * 100).toFixed(1)}%
+- Blink rate: ${payload.baseline.blinkRate} blinks/min [measured over ~5s — sample size too small for population comparison; interpret only as delta-from-baseline if available]
+- PERCLOS: ${(payload.baseline.perclos * 100).toFixed(1)}% [same caveat as blink rate]
 
-LIGHT REFLEX (optional, often unavailable on consumer cameras):
-${payload.lightReflex.constrictionAmplitudeMm === 0 ? `⚠️ PLR DATA UNAVAILABLE — screen flash overexposed the camera sensor OR phase skipped in basic mode. DO NOT penalize for missing PLR.` : `- Constriction latency: ${payload.lightReflex.constrictionLatencyMs}ms
+LIGHT REFLEX:
+${payload.lightReflex.constrictionAmplitudeMm === 0 ? `⚠️ PLR DATA UNAVAILABLE — screen flash overexposed the camera sensor OR phase skipped. DO NOT penalize.` : `- Constriction latency: ${payload.lightReflex.constrictionLatencyMs}ms
 - Constriction amplitude: ${payload.lightReflex.constrictionAmplitudeMm}mm
 - Constriction velocity: ${payload.lightReflex.constrictionVelocityMmPerSec}mm/s
 - Re-dilation T50: ${payload.lightReflex.redilationT50Ms}ms`}
-- Time series points: ${payload.lightReflex.pupilDiameterTimeSeries.length}
 
-PURSUIT & NYSTAGMUS:
-- Smooth pursuit gain (Pearson correlation): ${payload.pursuit.smoothPursuitGainRatio}
-- Saccade count (catch-up saccades during pursuit): ${payload.pursuit.saccadeCount}
-- HGN clues:
-  - Onset before max deviation: L=${payload.pursuit.nystagmusClues.onsetBeforeMaxDeviation.left}, R=${payload.pursuit.nystagmusClues.onsetBeforeMaxDeviation.right}
-  - Distinct at max deviation: L=${payload.pursuit.nystagmusClues.distinctAtMaxDeviation.left}, R=${payload.pursuit.nystagmusClues.distinctAtMaxDeviation.right}
-  - Smooth pursuit failure: L=${payload.pursuit.nystagmusClues.smoothPursuitFailure.left}, R=${payload.pursuit.nystagmusClues.smoothPursuitFailure.right}
+PURSUIT:
+- Smooth pursuit gain (Pearson correlation, NOT velocity ratio): ${payload.pursuit.smoothPursuitGainRatio}
+- Saccade count during pursuit phase: ${payload.pursuit.saccadeCount}
+- Phase_3 stimulus: 1.5 sinusoidal cycles over 8 s (NOT the SFST HGN protocol). Do NOT use HGN clue language.
 
 HIPPUS:
 - Pupil unrest index: ${payload.hippus.pupilUnrestIndex}
 - Dominant frequency: ${payload.hippus.dominantFrequencyHz}Hz
 
 ${payload.voiceAnalysis ? `VOICE ANALYSIS (Reading French aloud):
-- Speech rate: ${payload.voiceAnalysis.speechRateWordsPerMin} words/min (measured over VOICED time only — prosodic pauses already excluded)
+- Speech rate: ${payload.voiceAnalysis.speechRateWordsPerMin} wpm (measured over voiced time; prosodic pauses excluded from denominator)
 - Total duration: ${payload.voiceAnalysis.totalDurationMs}ms
 - Voiced duration: ${payload.voiceAnalysis.voicedDurationMs}ms
-- Pause count: ${payload.voiceAnalysis.pauseCount}
-- Total pause time: ${payload.voiceAnalysis.pauseTotalMs}ms
-- Mean pause duration: ${payload.voiceAnalysis.meanPauseDurationMs}ms
+- Voiced/total ratio: ${payload.voiceAnalysis.totalDurationMs > 0 ? ((payload.voiceAnalysis.voicedDurationMs / payload.voiceAnalysis.totalDurationMs) * 100).toFixed(0) : "0"}% ${payload.voiceAnalysis.totalDurationMs > 0 && payload.voiceAnalysis.voicedDurationMs / payload.voiceAnalysis.totalDurationMs < 0.30 ? "[WARNING: below 30% — likely capture failure, voice signals unreliable]" : ""}
+- Pause count: ${payload.voiceAnalysis.pauseCount} [expected 10-20 for this corpus, normal prosody]
+- Mean pause duration: ${payload.voiceAnalysis.meanPauseDurationMs}ms [expected 150-500ms for French commas/periods]
 - Spectral centroid: ${payload.voiceAnalysis.spectralCentroidMean}Hz
-- Spectral flatness: ${payload.voiceAnalysis.spectralFlatnessMean} (0=tonal, 1=noise; slurred speech → higher flatness)
+- Spectral flatness: ${payload.voiceAnalysis.spectralFlatnessMean}
 - MFCC mean: [${payload.voiceAnalysis.mfccMean.join(", ")}]
 - MFCC std: [${payload.voiceAnalysis.mfccStd.join(", ")}]
 - SNR: ${payload.voiceAnalysis.signalToNoiseRatio}dB
-Reference: Suffoletto et al. 2023 (J Studies Alcohol & Drugs, Stanford): 98% accuracy detecting BAC>0.08% from smartphone audio via SVM on MFCCs + spectral features.
-CAVEAT (MUST read before scoring): our implementation extracts aggregate MFCCs/spectral stats
-and hands them to an LLM — this is NOT the Suffoletto SVM pipeline. Treat voice as a SECONDARY
-signal, weight it below pursuit-gain + blink-rate. Only flag speech as impaired when multiple
-voice metrics co-move AND ocular metrics corroborate.
 
-READING PROTOCOL & PROSODIC PAUSE EXPECTATION:
-- Corpus: "La bise et le soleil" (≈49 words, phonetically balanced French reference, ISO) +
-  1 randomly selected tongue twister (~10 words).
-- The fable contains ~10 commas and ~3 periods. Faithful reading normally produces
-  10-18 prosodic pauses, each 150-450 ms (commas) to 400-800 ms (periods).
-- Therefore:
-  - Pause COUNT of 10-20 is EXPECTED and NOT a sign of impairment.
-  - Mean pause duration up to ~500 ms is normal prosody.
-  - Only flag as hesitation-impairment when: pause count >22 OR mean pause >700 ms
-    OR pauses clearly cluster mid-phrase (cannot be inferred from aggregate stats, so be cautious).
-- Voiced/total ratio: below 30% suggests capture issue (mic failed, stopped early) or
-  severe impairment. 40-65% is normal for a punctuated French reading.
-- Expected voiced-time speech rate: 140-180 wpm. <110 wpm on voiced time specifically is
-  suggestive (total-time wpm of the old schema is no longer sent).` : "VOICE ANALYSIS: Not available for this session."}
+Reading corpus: "La bise et le soleil" (~49 words, ISO phonetic reference) + one tongue twister.
+The fable contains ~10 commas and ~3 periods. Faithful reading produces 10-20 prosodic pauses naturally.
+Only flag as hesitation-impairment when: pause count >22 OR mean pause >700 ms — do NOT penalize normal prosody.
+Voice is a SECONDARY signal in our pipeline (see SYSTEM prompt caveat about Suffoletto SVM).` : "VOICE ANALYSIS: Not available for this session."}
 
 Respond with a JSON object matching this schema:
 {
-  "summary": "string — 2 sentence summary in French",
+  "summary": "string — 2-3 sentences in French, including a disclaimer reminding this is not a diagnosis and that alcohol + driving is always a bad combination",
   "categories": {
-    "alcohol": { "score": 0-100, "confidence": "low|moderate|high", "confidenceExplanation": "string citing specific studies", "label": "string", "observations": ["string"], "scientificBasis": "string with study citations", "limitations": ["string"], "alternativeExplanations": ["string"] },
+    "alcohol": { "score": 0-100, "confidence": "low|moderate|high", "confidenceExplanation": "string", "label": "string — use DEVIATION language, not diagnostic language", "observations": ["string"], "scientificBasis": "string citing ONLY the 6 verified references above", "limitations": ["string"], "alternativeExplanations": ["string"] },
     "fatigue": { same structure },
     "substances": { same structure }
   },
   "dataQuality": { "overallQuality": "good|fair|poor", "issues": ["string"] }
 }
 
+Schema-level note: the field names "alcohol", "fatigue", "substances" are legacy keys retained for back-compat. In your labels and text, treat them as "oculomotor / arousal / motor-speech deviation indicators". Do NOT issue BAC estimates, do NOT issue driving-fitness verdicts.
+
 All text content (summary, observations, labels, explanations) MUST be in French.
-When citing studies in observations/scientificBasis, use the format: "(Auteur et al., Année)".`;
+When citing studies, use the format: "(Auteur et al., Année)" and only from the 6 verified references.`;
 }
