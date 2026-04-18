@@ -236,7 +236,18 @@ getUserMedia({
 **Fichiers :** payload schema, claude-prompt.ts, extraction features
 **Changement :** retirer complètement scleralColorLAB, scleralRednessIndex, scleralYellownessIndex du pipeline. Update Zod schema.
 
-### 2.7 Tests et merge phase 2
+### 2.7 Blink rate / PERCLOS : agrégation sur la durée totale de capture
+**Fichiers :** `src/lib/eye-tracking/feature-extractor.ts` (ou équivalent), `src/types/index.ts`
+**Raison :** le champ `baseline.blinkRate` est actuellement mesuré sur la phase_1 de 5 s seulement. Statistiquement insuffisant (blink rate normal 12-20/min = 1-1,7 clignements en 5 s). Claude le signale dans ses limitations — il faut le réparer dans l'extraction.
+**Changement :**
+- Le blink detector aggrège sur toutes les phases pré-lecture (phase_1 + phase_2_close + phase_2_flash + phase_2_dark + phase_3), soit ~30 s au lieu de 5 s
+- Exclure les périodes où l'utilisateur a les yeux intentionnellement fermés (phase_2_close après détection du closure)
+- Si frames valides < 500 (≈ 30 s à 15 FPS) → `blinkRate = null`, exclu du scoring
+- Même logique pour PERCLOS
+- Mettre à jour le prompt pour indiquer la fenêtre de mesure ("blink rate mesuré sur ~30 s de capture active")
+**Vérification :** test unitaire avec série synthétique 30 s contenant 8 blinks → blinkRate = 16/min (±1) ; avec 2 blinks sur 5 s → blinkRate = null ou flagged.
+
+### 2.8 Tests et merge phase 2
 
 ---
 
