@@ -90,10 +90,17 @@ export function LightFlash({
   }
 
   if (subPhase === "flash") {
+    // Phase 2.10 (valk-v3): max-luminance white stimulus for PLR.
+    // The previous animate-pulse oscillated bg opacity 50-100 % (Tailwind
+    // pulse keyframes), cutting the average screen luminance by ~25 %. PLR
+    // amplitude scales with the log of the stimulus intensity step (dark →
+    // bright). We want the brightest, steadiest step possible.
+    // Text is kept small + in a corner so it doesn't attenuate the central
+    // field of view — the iris sees near-uniform white.
     return (
-      <div className="absolute inset-0 z-50 bg-white flex items-center justify-center animate-pulse">
-        <p className="text-zinc-900 text-5xl font-bold tracking-tight">
-          OUVREZ
+      <div className="absolute inset-0 z-50 bg-white">
+        <p className="absolute bottom-6 left-0 right-0 text-center text-zinc-700 text-lg font-semibold tracking-tight">
+          OUVREZ LES YEUX
         </p>
       </div>
     );

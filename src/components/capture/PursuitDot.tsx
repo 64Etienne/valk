@@ -71,7 +71,11 @@ export function PursuitDot({ phaseStartMs, phaseDurationMs }: PursuitDotProps) {
           style={{
             position: "absolute",
             left: 0,
-            top: "33%",
+            // Phase 2.9 (valk-v3): placed at 14 % of screen height, ≈ same
+            // vertical band as FixationDot. iPhone camera is at the top of
+            // the device, so keeping the gaze high minimises upper-eyelid
+            // occlusion of the iris and stabilises EAR/pursuit detection.
+            top: "14vh",
             willChange: "transform",
             transform: "translate3d(0, 0, 0)",
           }}
