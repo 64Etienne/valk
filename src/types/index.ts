@@ -75,6 +75,19 @@ export interface AnalysisPayload {
     pauseCount: number;
     pauseTotalMs: number;
     meanPauseDurationMs: number;
+    // Diagnostic / optional
+    voicedDurationExclPeripheralSilenceMs?: number;
+    rmsDistribution?: {
+      min: number; p10: number; p25: number; p50: number; p75: number; p90: number; max: number;
+      adaptiveThreshold: number;
+    };
+    zcrDistribution?: {
+      p10: number; p50: number; p90: number; voicedP50: number; silentP50: number;
+    };
+    framesTotal?: number;
+    framesVoiced?: number;
+    framesRejectedLowEnergy?: number;
+    framesRejectedZcrOutOfRange?: number;
     totalDurationMs: number;
     voicedDurationMs: number;
     signalToNoiseRatio: number;
@@ -95,6 +108,37 @@ export interface AnalysisPayload {
     cameraResolution: { width: number; height: number };
   };
   personalBaseline?: PersonalBaseline;
+  // Deep-dive diagnostics — optional. When present, lets the server-side
+  // audit explain *why* a capture was low-quality (FPS bottleneck, delegate
+  // fallback, etc). See docs/superpowers/plans/valk-v3/*.md.
+  debug?: {
+    mediapipe?: {
+      sampleCount: number;
+      medianDetectMs: number;
+      p95DetectMs: number;
+      maxDetectMs: number;
+      medianDrawMs: number;
+      p95DrawMs: number;
+      medianInterFrameMs: number;
+      p95InterFrameMs: number;
+      activeDelegate: "GPU" | "CPU";
+      downscaleApplied: boolean;
+      sourceWidth: number;
+      sourceHeight: number;
+      downscaleWidth: number | null;
+      downscaleHeight: number | null;
+    };
+    camera?: {
+      nativeFps: number | null;
+      trackSettings: {
+        width?: number;
+        height?: number;
+        frameRate?: number;
+        facingMode?: string;
+        deviceId?: string;
+      } | null;
+    };
+  };
 }
 
 export interface PersonalBaseline {

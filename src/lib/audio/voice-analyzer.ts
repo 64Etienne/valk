@@ -19,6 +19,30 @@ export interface VoiceFeatures {
   totalDurationMs: number;
   voicedDurationMs: number;
   signalToNoiseRatio: number;
+  // Observability (valk-v3 deep dive 2026-04-18): diagnostics to understand
+  // why the VAD rejects more frames than expected on a given device.
+  voicedDurationExclPeripheralSilenceMs?: number;
+  rmsDistribution?: {
+    min: number;
+    p10: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+    max: number;
+    adaptiveThreshold: number;
+  };
+  zcrDistribution?: {
+    p10: number;
+    p50: number;
+    p90: number;
+    voicedP50: number;
+    silentP50: number;
+  };
+  framesTotal?: number;
+  framesVoiced?: number;
+  framesRejectedLowEnergy?: number;
+  framesRejectedZcrOutOfRange?: number;
 }
 
 const FRAME_SIZE = 2048;
@@ -143,9 +167,15 @@ export function analyzeVoice(
   );
 
   // Pass 2 VAD: energy + ZCR + hysteresis → boolean array per frame
-  const voicedRaw: boolean[] = rmsValues.map(
-    (rms, i) => rms >= adaptiveThreshold && zcrValues[i] >= ZCR_MIN && zcrValues[i] <= ZCR_MAX
-  );
+  let rejectedLowEnergy = 0;
+  let rejectedZcr = 0;
+  const voicedRaw: boolean[] = rmsValues.map((rms, i) => {
+    const energyOk = rms >= adaptiveThreshold;
+    const zcrOk = zcrValues[i] >= ZCR_MIN && zcrValues[i] <= ZCR_MAX;
+    if (!energyOk) rejectedLowEnergy++;
+    else if (!zcrOk) rejectedZcr++;
+    return energyOk && zcrOk;
+  });
   const voiced: boolean[] = applyHysteresis(voicedRaw, HYSTERESIS_FRAMES);
 
   // Pass 3: extract spectral features for voiced frames
@@ -202,6 +232,22 @@ export function analyzeVoice(
   const totalDurationMs = (samples.length / sampleRate) * 1000;
   const voicedDurationMs = voicedFrames * frameDurationMs;
 
+  // Recompute ratio excluding leading/trailing silence periods (delays before
+  // the user starts speaking and after they finish reading). Otherwise a 2 s
+  // lead-in + 1 s trail-out on an 18 s recording can swing the ratio by 15 pts.
+  let firstVoicedIdx = -1;
+  let lastVoicedIdx = -1;
+  for (let i = 0; i < voiced.length; i++) {
+    if (voiced[i]) {
+      if (firstVoicedIdx === -1) firstVoicedIdx = i;
+      lastVoicedIdx = i;
+    }
+  }
+  const voicedDurationExclPeripheralSilenceMs =
+    firstVoicedIdx === -1
+      ? 0
+      : Math.round((lastVoicedIdx - firstVoicedIdx + 1) * frameDurationMs);
+
   // Speech rate is measured over VOICED time (actual talking), not total time.
   // Otherwise prosodic pauses at commas/periods — which are normal in faithful
   // reading of a punctuated French text — artificially depress wpm and get
@@ -234,6 +280,17 @@ export function analyzeVoice(
   const avg = (arr: number[]) =>
     arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
 
+  // Diagnostic distributions so we can see WHY the VAD rejects frames on a
+  // given device (e.g. threshold too high → most frames rejected for low
+  // energy; or ambient noise too rich → most frames rejected for ZCR).
+  const rmsSorted = [...rmsValues].sort((a, b) => a - b);
+  const zcrSorted = [...zcrValues].sort((a, b) => a - b);
+  const voicedZcrs = zcrValues.filter((_, i) => voiced[i]).sort((a, b) => a - b);
+  const silentZcrs = zcrValues.filter((_, i) => !voiced[i]).sort((a, b) => a - b);
+  const q = (sorted: number[], p: number) =>
+    sorted.length === 0 ? 0 : sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+  const r5 = (x: number) => Math.round(x * 10000) / 10000;
+
   return {
     mfccMean,
     mfccStd,
@@ -247,5 +304,27 @@ export function analyzeVoice(
     totalDurationMs: Math.round(totalDurationMs),
     voicedDurationMs: Math.round(voicedDurationMs),
     signalToNoiseRatio: snr,
+    voicedDurationExclPeripheralSilenceMs,
+    rmsDistribution: {
+      min: r5(rmsSorted[0] ?? 0),
+      p10: r5(q(rmsSorted, 0.1)),
+      p25: r5(q(rmsSorted, 0.25)),
+      p50: r5(q(rmsSorted, 0.5)),
+      p75: r5(q(rmsSorted, 0.75)),
+      p90: r5(q(rmsSorted, 0.9)),
+      max: r5(rmsSorted[rmsSorted.length - 1] ?? 0),
+      adaptiveThreshold: r5(adaptiveThreshold),
+    },
+    zcrDistribution: {
+      p10: r5(q(zcrSorted, 0.1)),
+      p50: r5(q(zcrSorted, 0.5)),
+      p90: r5(q(zcrSorted, 0.9)),
+      voicedP50: r5(q(voicedZcrs, 0.5)),
+      silentP50: r5(q(silentZcrs, 0.5)),
+    },
+    framesTotal: rmsValues.length,
+    framesVoiced: voiced.filter(Boolean).length,
+    framesRejectedLowEnergy: rejectedLowEnergy,
+    framesRejectedZcrOutOfRange: rejectedZcr,
   };
 }

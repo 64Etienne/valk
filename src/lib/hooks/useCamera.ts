@@ -138,5 +138,79 @@ export function useCamera() {
     };
   }, []);
 
-  return { videoRef, isActive, videoReady, error, resolution, start, stop };
+  // Native camera FPS via requestVideoFrameCallback. Independent from the
+  // MediaPipe detect loop; tells us whether the camera itself is delivering
+  // 30 fps frames or if iOS is throttling us to 4 fps (low-power mode,
+  // thermal throttling, etc).
+  const frameCountRef = useRef(0);
+  const firstFrameTsRef = useRef<number | null>(null);
+  const lastFrameTsRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isActive || !videoReady) return;
+    const video = videoRef.current;
+    if (!video) return;
+    type VideoWithRVFC = HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: (now: number) => void) => number;
+      cancelVideoFrameCallback?: (id: number) => void;
+    };
+    const vel = video as VideoWithRVFC;
+    if (!vel.requestVideoFrameCallback) {
+      log("camera.rvfc.unsupported");
+      return;
+    }
+    let cancelled = false;
+    let handle = 0;
+    const tick = (now: number) => {
+      if (cancelled) return;
+      if (firstFrameTsRef.current === null) firstFrameTsRef.current = now;
+      lastFrameTsRef.current = now;
+      frameCountRef.current++;
+      handle = vel.requestVideoFrameCallback!(tick);
+    };
+    handle = vel.requestVideoFrameCallback!(tick);
+    return () => {
+      cancelled = true;
+      if (vel.cancelVideoFrameCallback && handle) {
+        vel.cancelVideoFrameCallback(handle);
+      }
+    };
+  }, [isActive, videoReady]);
+
+  const getNativeFps = useCallback((): number => {
+    const first = firstFrameTsRef.current;
+    const last = lastFrameTsRef.current;
+    const count = frameCountRef.current;
+    if (first === null || last === null || count < 2 || last === first) return 0;
+    const durationMs = last - first;
+    return Math.round((count / durationMs) * 1000 * 10) / 10;
+  }, []);
+
+  const getTrackSettings = useCallback(() => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return null;
+    try {
+      const s = track.getSettings();
+      return {
+        width: s.width,
+        height: s.height,
+        frameRate: s.frameRate,
+        facingMode: s.facingMode,
+        deviceId: typeof s.deviceId === "string" ? s.deviceId.slice(0, 8) : undefined,
+      };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  return {
+    videoRef,
+    isActive,
+    videoReady,
+    error,
+    resolution,
+    start,
+    stop,
+    getNativeFps,
+    getTrackSettings,
+  };
 }

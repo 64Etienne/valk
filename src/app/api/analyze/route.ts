@@ -93,6 +93,60 @@ const payloadSchema = z.object({
       totalDurationMs: z.number(),
       voicedDurationMs: z.number(),
       signalToNoiseRatio: z.number(),
+      voicedDurationExclPeripheralSilenceMs: z.number().optional(),
+      rmsDistribution: z
+        .object({
+          min: z.number(), p10: z.number(), p25: z.number(), p50: z.number(),
+          p75: z.number(), p90: z.number(), max: z.number(),
+          adaptiveThreshold: z.number(),
+        })
+        .optional(),
+      zcrDistribution: z
+        .object({
+          p10: z.number(), p50: z.number(), p90: z.number(),
+          voicedP50: z.number(), silentP50: z.number(),
+        })
+        .optional(),
+      framesTotal: z.number().optional(),
+      framesVoiced: z.number().optional(),
+      framesRejectedLowEnergy: z.number().optional(),
+      framesRejectedZcrOutOfRange: z.number().optional(),
+    })
+    .optional(),
+  debug: z
+    .object({
+      mediapipe: z
+        .object({
+          sampleCount: z.number(),
+          medianDetectMs: z.number(),
+          p95DetectMs: z.number(),
+          maxDetectMs: z.number(),
+          medianDrawMs: z.number(),
+          p95DrawMs: z.number(),
+          medianInterFrameMs: z.number(),
+          p95InterFrameMs: z.number(),
+          activeDelegate: z.enum(["GPU", "CPU"]),
+          downscaleApplied: z.boolean(),
+          sourceWidth: z.number(),
+          sourceHeight: z.number(),
+          downscaleWidth: z.number().nullable(),
+          downscaleHeight: z.number().nullable(),
+        })
+        .optional(),
+      camera: z
+        .object({
+          nativeFps: z.number().nullable(),
+          trackSettings: z
+            .object({
+              width: z.number().optional(),
+              height: z.number().optional(),
+              frameRate: z.number().optional(),
+              facingMode: z.string().optional(),
+              deviceId: z.string().optional(),
+            })
+            .nullable(),
+        })
+        .optional(),
     })
     .optional(),
   context: z.object({

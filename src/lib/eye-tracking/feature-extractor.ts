@@ -90,7 +90,8 @@ export class FeatureExtractor {
     context: UserContext,
     cameraResolution: { width: number; height: number },
     captureDurationMs: number,
-    voiceFeatures?: AnalysisPayload["voiceAnalysis"]
+    voiceFeatures?: AnalysisPayload["voiceAnalysis"],
+    debug?: AnalysisPayload["debug"]
   ): AnalysisPayload {
     const baseline = this.pupilAnalyzer.getBaseline();
     const symmetry = this.pupilAnalyzer.getSymmetryRatio();
@@ -176,6 +177,7 @@ export class FeatureExtractor {
         deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
         cameraResolution,
       },
+      ...(debug ? { debug } : {}),
     };
   }
 }

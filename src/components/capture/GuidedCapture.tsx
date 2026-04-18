@@ -167,11 +167,20 @@ export function GuidedCapture({ mode = "analyze" }: GuidedCaptureProps = {}) {
       setPhase("extracting");
       if (!context) return;
       const durationMs = performance.now() - captureStartRef.current;
+      // Collect diagnostics BEFORE buildPayload so the debug block is part
+      // of the audit-logged payload.
+      const mpTimings = mediapipe.getTimings();
+      const nativeFps = camera.getNativeFps();
+      const trackSettings = camera.getTrackSettings();
       const payload = extraction.buildPayload(
         context,
         camera.resolution,
         durationMs,
-        voiceFeats
+        voiceFeats,
+        {
+          mediapipe: mpTimings,
+          camera: { nativeFps: nativeFps || null, trackSettings },
+        }
       );
 
       // Baseline mode: save as personal baseline and exit without running analysis

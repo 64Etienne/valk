@@ -107,9 +107,13 @@ export class BlinkDetector {
    * processing is required for blink rate to be statistically meaningful
    * (normal rate 12-20/min → 4-7 blinks expected in 20 s). Below this, the
    * measurement is too sparse to compare to population norms.
+   *
+   * The old double-gate (`earHistory.length >= 300`) has been removed: at
+   * low FPS it triggered a contradictory "< 20 s" message even when active
+   * duration WAS > 20 s. FPS quality is already gated separately upstream.
    */
   getBlinkRateReliable(): boolean {
-    return this.getActiveDurationMs() >= 20_000 && this.earHistory.length >= 300;
+    return this.getActiveDurationMs() >= 20_000;
   }
 
   getPERCLOS(): number {
