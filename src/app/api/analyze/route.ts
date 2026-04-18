@@ -128,9 +128,24 @@ export async function POST(request: NextRequest) {
   const sid = request.headers.get("x-session-id") || "anon";
   const ua = request.headers.get("user-agent") || "";
   const audit = (event: string, data?: unknown, level: string = "info") => {
+    // Two sinks so we can always retrieve it:
+    // (1) Local in-memory store — cheap, but per-lambda so may not be
+    //     reachable from a GET /api/logs/:sid hitting a different instance.
+    // (2) stdout with a greppable prefix — always visible via Vercel
+    //     runtime logs, searchable by sid.
     appendEntries(sid, ua, "/api/analyze", [
       { ts: 0, wallMs: Date.now(), level, event, data },
     ]);
+    try {
+      const line = `VALK-AUDIT sid=${sid} [${level}] ${event} ${
+        data !== undefined ? JSON.stringify(data) : ""
+      }`;
+      if (level === "error") console.error(line);
+      else if (level === "warn") console.warn(line);
+      else console.log(line);
+    } catch {
+      /* JSON.stringify circular — unlikely with plain data */
+    }
   };
 
   const body = await request.json().catch(() => null);
