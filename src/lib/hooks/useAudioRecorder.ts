@@ -22,15 +22,18 @@ export function useAudioRecorder() {
       setError(null);
       chunksRef.current = [];
 
-      // Bar environment: noise suppression + AGC compensate for
-      // noisy rooms and variable mic distance. Trade-off: less pure
-      // signal (what Suffoletto 2023 wanted) but dramatically more
-      // robust voice ratio in real conditions.
+      // Phase 2.2 (valk-v3) : AGC désactivée pour stabiliser le VAD.
+      // L'AGC iPhone compresse dynamiquement le signal et fait dériver la
+      // moyenne RMS, ce qui fausse le threshold P15 du VAD adaptatif —
+      // résultat mesuré en prod : voicedRatio ~25% (très sous les 40%
+      // attendus pour de la lecture normale). noiseSuppression conservé
+      // pour environnement bar. echoCancellation désactivé car on n'a pas
+      // de haut-parleur actif pendant la capture vocale.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false,
           sampleRate: { ideal: 44100 },
           channelCount: 1,
         },
