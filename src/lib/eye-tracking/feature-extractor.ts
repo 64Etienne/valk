@@ -110,6 +110,22 @@ export class FeatureExtractor {
     const blinkRateActiveDurationMs = this.blinkDetector.getActiveDurationMs();
     const blinkRateReliable = this.blinkDetector.getBlinkRateReliable();
 
+    // Phase 2.11 (valk-v3): averageFps must be computed against ACTIVE
+    // processing time, not total capture duration. Total duration inclut
+    // phase_2_close (yeux intentionnellement fermés, processFrame skippé),
+    // phase_4_reading (32 s sans aucun detect MediaPipe) et le countdown.
+    // Diviser par 60 000 ms de "capture totale" quand seules ~22 s contiennent
+    // du processing donne une FPS artificiellement basse (~4) alors que le
+    // pipeline tourne en réalité à 10-15 FPS. C'est la cause racine du faux
+    // positif du quality gate LOW_FPS observé sur les sessions iPhone.
+    const activeMsForFps = blinkRateActiveDurationMs;
+    const computedFps =
+      activeMsForFps > 0
+        ? Math.round((this.frameCount / activeMsForFps) * 1000)
+        : captureDurationMs > 0
+          ? Math.round((this.frameCount / captureDurationMs) * 1000)
+          : 0;
+
     const pursuitGain = this.nystagmusDetector.getSmoothPursuitGain();
     const saccadeCount = this.nystagmusDetector.getSaccadeCount();
     const nystagmusClues = this.nystagmusDetector.getNystagmusClues();
@@ -173,7 +189,7 @@ export class FeatureExtractor {
         captureTimestamp: new Date().toISOString(),
         captureDurationMs,
         frameCount: this.frameCount,
-        averageFps: captureDurationMs > 0 ? Math.round((this.frameCount / captureDurationMs) * 1000) : 0,
+        averageFps: computedFps,
         deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
         cameraResolution,
       },

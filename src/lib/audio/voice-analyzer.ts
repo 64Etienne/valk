@@ -47,7 +47,14 @@ export interface VoiceFeatures {
 
 const FRAME_SIZE = 2048;
 const HOP_SIZE = 512;
-const SILENCE_THRESHOLD = 0.005;
+// Phase 2.12 (valk-v3): absolute noise floor very low (safety only).
+// Previous value 0.005 was calibrated for noisy environments with AGC on,
+// but on iPhone with AGC off (Phase 2.2) the P50 RMS of a real user in a
+// quiet room drops to ~0.0036 — below 0.005. The adaptive threshold then
+// clamps to 0.005 and 60% of voiced frames are rejected as silence.
+// Keeping a tiny floor (0.0005) to protect against RMS==0 noise sources
+// only. The adaptive P25×3 below drives the real decision.
+const SILENCE_THRESHOLD = 0.0005;
 const MIN_PAUSE_MS = 150;
 
 // Phase 2.2 (valk-v3) : VAD énergie+ZCR.
@@ -156,14 +163,17 @@ export function analyzeVoice(
     rawFrames.push(windowedFrame);
   }
 
-  // Adaptive energy threshold: 25th percentile × 2 as noise floor.
-  // With AGC off (Phase 2.2), the RMS distribution has a real noise mode,
-  // so percentile-based thresholding is stable. P25×2 is more conservative
-  // than the previous P15×1.5 and handles brief silences better.
+  // Adaptive energy threshold: P25 × 3.
+  // Phase 2.12: increased multiplier (2→3) now that the absolute floor is
+  // near-zero. On a real iPhone capture in a silent room the P25 was 0.0015
+  // and the P50 (≈ median voice energy) was 0.0036. With the old floor at
+  // 0.005 this excluded 60% of real speech. With P25×3 = 0.0045 ≈ P50, we
+  // keep voiced/silent separation while adapting to any recording level.
+  // In noisy rooms, P25 naturally climbs and threshold follows.
   const sortedRms = [...rmsValues].sort((a, b) => a - b);
   const adaptiveThreshold = Math.max(
     SILENCE_THRESHOLD,
-    sortedRms[Math.floor(sortedRms.length * 0.25)] * 2
+    sortedRms[Math.floor(sortedRms.length * 0.25)] * 3
   );
 
   // Pass 2 VAD: energy + ZCR + hysteresis → boolean array per frame
