@@ -127,15 +127,24 @@ export async function POST(request: NextRequest) {
 
   const sid = request.headers.get("x-session-id") || "anon";
   const ua = request.headers.get("user-agent") || "";
+  const host = request.headers.get("host") || process.env.VERCEL_URL || "";
+  const logsUrl = host ? `https://${host}/api/logs` : "";
+  // Audit buffer — flushed to /api/logs at request end so all entries land
+  // in the SAME lambda's store as the client logger, retrievable in raw JSON
+  // via GET /api/logs/:sid (no MCP display truncation).
+  const auditBuffer: Array<{
+    ts: number;
+    wallMs: number;
+    level: string;
+    event: string;
+    data?: unknown;
+  }> = [];
+
   const audit = (event: string, data?: unknown, level: string = "info") => {
-    // Two sinks so we can always retrieve it:
-    // (1) Local in-memory store — cheap, but per-lambda so may not be
-    //     reachable from a GET /api/logs/:sid hitting a different instance.
-    // (2) stdout with a greppable prefix — always visible via Vercel
-    //     runtime logs, searchable by sid.
-    appendEntries(sid, ua, "/api/analyze", [
-      { ts: 0, wallMs: Date.now(), level, event, data },
-    ]);
+    const entry = { ts: 0, wallMs: Date.now(), level, event, data };
+    // Sink 1: same-lambda in-memory store (best-effort)
+    appendEntries(sid, ua, "/api/analyze", [entry]);
+    // Sink 2: stdout (visible in Vercel runtime logs, but MCP display truncates)
     try {
       const line = `VALK-AUDIT sid=${sid} [${level}] ${event} ${
         data !== undefined ? JSON.stringify(data) : ""
@@ -146,11 +155,33 @@ export async function POST(request: NextRequest) {
     } catch {
       /* JSON.stringify circular — unlikely with plain data */
     }
+    // Sink 3: buffer for end-of-request flush to /api/logs (cross-lambda)
+    auditBuffer.push(entry);
+  };
+
+  const flushAudit = async (): Promise<void> => {
+    if (auditBuffer.length === 0 || !logsUrl) return;
+    const entries = auditBuffer.splice(0);
+    try {
+      await fetch(logsUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: sid,
+          ua,
+          href: "/api/analyze",
+          entries,
+        }),
+      });
+    } catch (err) {
+      console.error("VALK-AUDIT flush to /api/logs failed:", err);
+    }
   };
 
   const body = await request.json().catch(() => null);
   if (!body) {
     audit("analyze.body.invalid", { reason: "json parse failed" }, "error");
+    await flushAudit();
     return sseErrorResponse("Payload JSON invalide.", 400);
   }
 
@@ -166,6 +197,7 @@ export async function POST(request: NextRequest) {
       },
       "error"
     );
+    await flushAudit();
     return new Response(
       encodeSSE("error", {
         error: "Données invalides.",
@@ -247,6 +279,7 @@ export async function POST(request: NextRequest) {
           send("error", {
             error: "Réponse IA tronquée (budget de tokens atteint). Réessayez.",
           });
+          await flushAudit();
           controller.close();
           return;
         }
@@ -255,6 +288,7 @@ export async function POST(request: NextRequest) {
         if (!finalText || finalText.type !== "text") {
           audit("analyze.error.no_text_block", { elapsedMs }, "error");
           send("error", { error: "Pas de contenu texte dans la réponse." });
+          await flushAudit();
           controller.close();
           return;
         }
@@ -287,12 +321,14 @@ export async function POST(request: NextRequest) {
               message: i.message,
             })),
           });
+          await flushAudit();
           controller.close();
           return;
         }
 
         audit("analyze.final", validated.data);
         send("final", validated.data);
+        await flushAudit();
         controller.close();
       } catch (err: unknown) {
         console.error("Streaming error:", err);
@@ -303,6 +339,7 @@ export async function POST(request: NextRequest) {
           stack: err instanceof Error ? err.stack?.slice(0, 600) : undefined,
         }, "error");
         send("error", { error: msg });
+        await flushAudit();
         controller.close();
       }
     },
