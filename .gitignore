@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
+# dependencies (monorepo: match at any depth)
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -11,14 +11,16 @@
 !.yarn/versions
 
 # testing
-/coverage
+coverage/
 
-# next.js
-/.next/
-/out/
+# next.js / expo (monorepo: match at any depth)
+.next/
+out/
+.expo/
+dist/
 
 # production
-/build
+build/
 
 # misc
 .DS_Store
@@ -42,3 +44,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local data store (raw media + sqlite) — never committed
+/data/
