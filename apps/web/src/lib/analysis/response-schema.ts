@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { SHARED_SCHEMA_VERSION } from "@valk/shared";
+
+/** Version du schéma d'analyse, alignée sur le package partagé (preuve de résolution monorepo). */
+export const ANALYSIS_SCHEMA_VERSION = SHARED_SCHEMA_VERSION;
 
 const categoryScoreSchema = z.object({
   score: z.number().min(0).max(100),

@@ -3,6 +3,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  transpilePackages: ["@valk/shared"],
 };
 
 export default withSentryConfig(nextConfig, {
