@@ -5,10 +5,13 @@ import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   LogChannel,
+  buildSentryEnvelope,
   type DeviceContext,
   type LogBatch,
   type LogEntry,
   type LogLevel,
+  type SentryEvent,
+  type SentryLevel,
 } from "@valk/shared";
 
 const STORAGE_KEY = "valk:pending-logs";
@@ -55,7 +58,11 @@ const send = async (batch: LogBatch): Promise<boolean> => {
   try {
     const res = await fetch(`${base.replace(/\/$/, "")}/api/logs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // évite la page d'avertissement ngrok sur les tunnels de test (sans effet ailleurs)
+        "ngrok-skip-browser-warning": "true",
+      },
       body: JSON.stringify(batch),
     });
     return res.ok;
@@ -63,6 +70,56 @@ const send = async (batch: LogBatch): Promise<boolean> => {
     return false;
   }
 };
+
+// --- Sentry via HTTP direct (envelope) ---
+// Le SDK @sentry/react-native ne fonctionne pas en Expo Go (module natif absent).
+// On envoie donc les events en POST fetch sur l'endpoint d'ingestion Sentry.
+const SENTRY_LEVEL: Record<LogLevel, SentryLevel> = {
+  trace: "debug",
+  debug: "debug",
+  info: "info",
+  warn: "warning",
+  error: "error",
+};
+
+function sentryDsn(): string {
+  return (Constants.expoConfig?.extra as { sentryDsn?: string } | undefined)?.sentryDsn ?? "";
+}
+
+function hexEventId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  const raw = c?.randomUUID
+    ? c.randomUUID()
+    : Math.random().toString(16).slice(2) + Date.now().toString(16);
+  return raw.replace(/-/g, "").padEnd(32, "0").slice(0, 32);
+}
+
+function sendSentryEvent(event: SentryEvent): void {
+  const dsn = sentryDsn();
+  if (!dsn) return;
+  const env = buildSentryEnvelope(dsn, event, {
+    eventId: hexEventId(),
+    timestampSec: Date.now() / 1000,
+    sentAtIso: new Date().toISOString(),
+  });
+  if (!env) return;
+  // fire-and-forget, best-effort
+  void fetch(env.url, {
+    method: "POST",
+    headers: { "content-type": env.contentType },
+    body: env.body,
+  }).catch(() => {});
+}
+
+function sentryMirror(level: LogLevel, category: string, message: string): void {
+  if (level !== "warn" && level !== "error") return;
+  sendSentryEvent({
+    level: SENTRY_LEVEL[level],
+    message: `${category}: ${message}`,
+    logger: category,
+    tags: { runtime: detectRuntime() },
+  });
+}
 
 let channel: LogChannel | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -116,9 +173,24 @@ export function stopObservability(): void {
 
 function emit(level: LogLevel, category: string, message: string, data?: unknown): void {
   channel?.log(level, category, message, data);
+  sentryMirror(level, category, message);
+}
+
+/** Capture une exception : log local (→ /debug) + Sentry (best-effort). */
+function captureException(e: unknown, context?: Record<string, unknown>): void {
+  const msg = e instanceof Error ? e.message : String(e);
+  channel?.log("error", "exception", msg, context);
+  sendSentryEvent({
+    level: "error",
+    exception: { values: [{ type: e instanceof Error ? e.name : "Error", value: msg }] },
+    logger: "exception",
+    tags: { runtime: detectRuntime() },
+    extra: context,
+  });
 }
 
 export const logger = {
+  captureException,
   trace: (category: string, message: string, data?: unknown) => emit("trace", category, message, data),
   debug: (category: string, message: string, data?: unknown) => emit("debug", category, message, data),
   info: (category: string, message: string, data?: unknown) => emit("info", category, message, data),

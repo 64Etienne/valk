@@ -9,3 +9,5 @@ export {
 export type { LogLevel, DeviceContext, LogEntry, LogBatch } from './observability';
 export { LogBuffer, LogChannel } from './log-channel';
 export type { SendFn, LogChannelOptions } from './log-channel';
+export { parseSentryDsn, buildSentryEnvelope } from './sentry-envelope';
+export type { SentryLevel, SentryEvent, ParsedDsn } from './sentry-envelope';

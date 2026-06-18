@@ -13,6 +13,11 @@ export default function Home() {
     void logger.flush();
   };
 
+  const onError = () => {
+    logger.captureException(new Error(`Valk — erreur de test #${count + 1}`), { n: count + 1 });
+    void logger.flush();
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Valk</Text>
@@ -21,6 +26,9 @@ export default function Home() {
 
       <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={onTest}>
         <Text style={styles.buttonText}>Envoyer un log test</Text>
+      </Pressable>
+      <Pressable style={({ pressed }) => [styles.buttonAlt, pressed && styles.buttonAltPressed]} onPress={onError}>
+        <Text style={styles.buttonText}>Tester une erreur (Sentry)</Text>
       </Pressable>
       {count > 0 && <Text style={styles.counter}>{count} log(s) envoyé(s)</Text>}
     </View>
@@ -40,6 +48,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   buttonPressed: { backgroundColor: "#6d28d9" },
+  buttonAlt: {
+    marginTop: 14,
+    backgroundColor: "#b45309",
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  buttonAltPressed: { backgroundColor: "#92400e" },
   buttonText: { color: "#ffffff", fontSize: 16, fontWeight: "700" },
   counter: { color: "#6b7280", fontSize: 13, marginTop: 16 },
 });
