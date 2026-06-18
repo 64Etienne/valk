@@ -31,7 +31,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-[#0b0b12] text-zinc-200">
       <meta name="referrer" content="no-referrer" />
-      <div className="mx-auto max-w-6xl px-6 py-8">
+      <div className="mx-auto max-w-6xl px-6 pt-8 pb-28">
         <header className="mb-8 flex items-baseline justify-between border-b border-white/10 pb-4">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-violet-300">
