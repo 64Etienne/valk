@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
+    "@valk/shared": "*",
     "expo": "~54.0.0",
     "expo-constants": "~18.0.13",
     "expo-linking": "~8.0.12",
