@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { SHARED_SCHEMA_VERSION } from "@valk/shared";
 import { logger } from "../src/observability/logger";
 
 export default function Home() {
+  const router = useRouter();
   const [count, setCount] = useState(0);
 
   const onTest = () => {
@@ -24,6 +26,13 @@ export default function Home() {
       <Text style={styles.subtitle}>Beta mobile — fondations</Text>
       <Text style={styles.meta}>shared schema v{SHARED_SCHEMA_VERSION}</Text>
 
+      <Pressable
+        style={({ pressed }) => [styles.buttonPrimary, pressed && styles.buttonPressed]}
+        onPress={() => router.push("/capture")}
+      >
+        <Text style={styles.buttonPrimaryText}>Démarrer une capture</Text>
+      </Pressable>
+
       <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={onTest}>
         <Text style={styles.buttonText}>Envoyer un log test</Text>
       </Pressable>
@@ -40,11 +49,19 @@ const styles = StyleSheet.create({
   title: { color: "#c4b5fd", fontSize: 40, fontWeight: "800", letterSpacing: 1 },
   subtitle: { color: "#9ca3af", fontSize: 16, marginTop: 8 },
   meta: { color: "#4b5563", fontSize: 12, marginTop: 24 },
-  button: {
+  buttonPrimary: {
     marginTop: 40,
     backgroundColor: "#7c3aed",
+    paddingHorizontal: 40,
+    paddingVertical: 18,
+    borderRadius: 16,
+  },
+  buttonPrimaryText: { color: "#ffffff", fontSize: 18, fontWeight: "800", letterSpacing: 0.3 },
+  button: {
+    marginTop: 28,
+    backgroundColor: "rgba(124,58,237,0.18)",
     paddingHorizontal: 28,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 14,
   },
   buttonPressed: { backgroundColor: "#6d28d9" },
