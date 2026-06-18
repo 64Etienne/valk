@@ -199,24 +199,16 @@ export async function POST(request: NextRequest) {
 
   const sid = request.headers.get("x-session-id") || "anon";
   const ua = request.headers.get("user-agent") || "";
-  const host = request.headers.get("host") || process.env.VERCEL_URL || "";
-  const logsUrl = host ? `https://${host}/api/logs` : "";
-  // Audit buffer — flushed to /api/logs at request end so all entries land
-  // in the SAME lambda's store as the client logger, retrievable in raw JSON
-  // via GET /api/logs/:sid (no MCP display truncation).
-  const auditBuffer: Array<{
-    ts: number;
-    wallMs: number;
-    level: string;
-    event: string;
-    data?: unknown;
-  }> = [];
-
+  // Audit entries are persisted in-process via appendEntries (Sink 1) and
+  // mirrored to stdout (Sink 2). The previous end-of-request HTTP flush to a
+  // URL built from the request Host header was redundant (same-process store)
+  // and an SSRF / audit-log-exfiltration vector — removed. Durable, shared
+  // storage arrives in sub-project A1 (SQLite).
   const audit = (event: string, data?: unknown, level: string = "info") => {
     const entry = { ts: 0, wallMs: Date.now(), level, event, data };
-    // Sink 1: same-lambda in-memory store (best-effort)
+    // Sink 1: in-process store (read back via GET /api/logs/:sid)
     appendEntries(sid, ua, "/api/analyze", [entry]);
-    // Sink 2: stdout (visible in Vercel runtime logs, but MCP display truncates)
+    // Sink 2: stdout (visible in server runtime logs)
     try {
       const line = `VALK-AUDIT sid=${sid} [${level}] ${event} ${
         data !== undefined ? JSON.stringify(data) : ""
@@ -227,28 +219,12 @@ export async function POST(request: NextRequest) {
     } catch {
       /* JSON.stringify circular — unlikely with plain data */
     }
-    // Sink 3: buffer for end-of-request flush to /api/logs (cross-lambda)
-    auditBuffer.push(entry);
   };
 
-  const flushAudit = async (): Promise<void> => {
-    if (auditBuffer.length === 0 || !logsUrl) return;
-    const entries = auditBuffer.splice(0);
-    try {
-      await fetch(logsUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: sid,
-          ua,
-          href: "/api/analyze",
-          entries,
-        }),
-      });
-    } catch (err) {
-      console.error("VALK-AUDIT flush to /api/logs failed:", err);
-    }
-  };
+  // No-op: audit entries are already persisted in-process by `audit()` above,
+  // so there is no end-of-request network flush (no Host-header-derived fetch).
+  // Kept as a function so existing call sites remain valid.
+  const flushAudit = async (): Promise<void> => {};
 
   const body = await request.json().catch(() => null);
   if (!body) {
