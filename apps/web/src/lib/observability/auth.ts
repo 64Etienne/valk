@@ -16,7 +16,8 @@ function safeEqual(a: string | null, b: string): boolean {
  * si la clé serveur n'est pas configurée on refuse, sauf en dev local explicite
  * (`VALK_DEBUG_OPEN=1` ET hors production).
  */
-export function checkDebugKey(req: Request): boolean {
+/** Cœur du gate : une clé fournie est-elle valide ? (réutilisable hors `Request`, ex. page /debug). */
+export function isAuthorizedKey(provided: string | null | undefined): boolean {
   const expected = process.env.VALK_DEBUG_KEY;
   if (!expected) {
     return (
@@ -24,6 +25,10 @@ export function checkDebugKey(req: Request): boolean {
       process.env.VALK_DEBUG_OPEN === "1"
     );
   }
+  return safeEqual(provided ?? null, expected);
+}
+
+export function checkDebugKey(req: Request): boolean {
   const headerKey = req.headers.get("x-valk-debug-key");
   let queryKey: string | null = null;
   try {
@@ -31,7 +36,7 @@ export function checkDebugKey(req: Request): boolean {
   } catch {
     /* URL non parsable — ignore la voie query */
   }
-  return safeEqual(headerKey, expected) || safeEqual(queryKey, expected);
+  return isAuthorizedKey(headerKey) || isAuthorizedKey(queryKey);
 }
 
 /** En-têtes limitant la propagation d'une clé passée en query (referrer/cache). */
