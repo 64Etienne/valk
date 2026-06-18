@@ -1,18 +1,19 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/logger/server-store";
+import { getStore } from "@/lib/observability/db";
+import { checkDebugKey, unauthorized, NO_LEAK_HEADERS } from "@/lib/observability/auth";
+
+export const runtime = "nodejs";
 
 /**
- * GET /api/logs/:sid — returns the full log dump for a given session ID.
- * Used by the dev to inspect exactly what happened on a user's device.
+ * GET /api/logs/:sid — dump complet des logs d'une session depuis la SQLite.
+ * **Gaté** par VALK_DEBUG_KEY (corrige l'IDOR : les logs contiennent des
+ * données device potentiellement sensibles).
  */
 export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ sid: string }> }
+  request: Request,
+  { params }: { params: Promise<{ sid: string }> },
 ) {
+  if (!checkDebugKey(request)) return unauthorized();
   const { sid } = await params;
-  const session = getSession(sid);
-  if (!session) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
-  return NextResponse.json(session);
+  const logs = getStore().getSessionLogs(sid);
+  return Response.json({ sessionId: sid, logs }, { headers: NO_LEAK_HEADERS });
 }

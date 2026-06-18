@@ -1,11 +1,8 @@
-import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { LogBatch, LogEntry, DeviceContext } from "@valk/shared";
 
-// `node:sqlite` (intégré Node 24) est trop récent pour la détection de built-ins
-// de Vite/Turbopack ; on le charge via createRequire (résolution runtime, non
-// analysée statiquement par les bundlers) avec un typage minimal maison.
+// Typage minimal maison de node:sqlite (évite de dépendre de @types/node récents).
 interface SqliteStatement {
   run(...params: unknown[]): unknown;
   all(...params: unknown[]): Record<string, unknown>[];
@@ -15,10 +12,17 @@ interface SqliteDb {
   exec(sql: string): void;
   prepare(sql: string): SqliteStatement;
 }
-const nodeRequire = createRequire(import.meta.url);
-const { DatabaseSync } = nodeRequire("node:sqlite") as {
-  DatabaseSync: new (path: string) => SqliteDb;
-};
+type DatabaseSyncCtor = new (path: string) => SqliteDb;
+
+// `node:sqlite` (intégré Node 24) chargé PARESSEUSEMENT via process.getBuiltinModule :
+// appel runtime non analysé par Vite/Turbopack → aucune erreur de bundling, et le
+// module n'est sollicité qu'à l'ouverture effective d'une base (pas à l'import).
+function loadDatabaseSync(): DatabaseSyncCtor {
+  const proc = process as unknown as {
+    getBuiltinModule(id: string): { DatabaseSync: DatabaseSyncCtor };
+  };
+  return proc.getBuiltinModule("node:sqlite").DatabaseSync;
+}
 
 export interface SessionSummary {
   sessionId: string;
@@ -69,6 +73,7 @@ export function createSqliteStore(path: string): ObservabilityStore {
   if (path !== ":memory:") {
     mkdirSync(dirname(path), { recursive: true });
   }
+  const DatabaseSync = loadDatabaseSync();
   const db = new DatabaseSync(path);
   migrate(db);
 

@@ -10,12 +10,14 @@ function req({ header, query }: { header?: string; query?: string }) {
 }
 
 const ORIG = process.env.VALK_DEBUG_KEY;
+const ORIG_ENV = process.env.NODE_ENV;
 
 describe("checkDebugKey", () => {
   afterEach(() => {
     if (ORIG === undefined) delete process.env.VALK_DEBUG_KEY;
     else process.env.VALK_DEBUG_KEY = ORIG;
     delete process.env.VALK_DEBUG_OPEN;
+    process.env.NODE_ENV = ORIG_ENV;
   });
 
   it("accepte la bonne clé en header", () => {
@@ -38,9 +40,17 @@ describe("checkDebugKey", () => {
     delete process.env.VALK_DEBUG_KEY;
     expect(checkDebugKey(req({ header: "anything" }))).toBe(false);
   });
-  it("VALK_DEBUG_OPEN=1 ouvre en dev local", () => {
+  it("VALK_DEBUG_OPEN=1 ouvre en dev local (hors production)", () => {
     delete process.env.VALK_DEBUG_KEY;
     process.env.VALK_DEBUG_OPEN = "1";
+    process.env.NODE_ENV = "development";
     expect(checkDebugKey(req({}))).toBe(true);
+  });
+
+  it("VALK_DEBUG_OPEN ignoré en production (pas de backdoor)", () => {
+    delete process.env.VALK_DEBUG_KEY;
+    process.env.VALK_DEBUG_OPEN = "1";
+    process.env.NODE_ENV = "production";
+    expect(checkDebugKey(req({}))).toBe(false);
   });
 });
