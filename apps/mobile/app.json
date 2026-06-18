@@ -2,8 +2,12 @@
   "expo": {
     "name": "Valk",
     "slug": "valk",
+    "owner": "scarfesse",
     "scheme": "valk",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -24,6 +28,15 @@
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c7657f7b-3f8e-4c83-9c88-09aef8df15b4"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c7657f7b-3f8e-4c83-9c88-09aef8df15b4"
+    }
   }
 }
