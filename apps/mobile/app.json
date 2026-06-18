@@ -30,6 +30,7 @@
       "expo-router"
     ],
     "extra": {
+      "apiBaseUrl": "",
       "router": {},
       "eas": {
         "projectId": "c7657f7b-3f8e-4c83-9c88-09aef8df15b4"
