@@ -7,3 +7,5 @@ export {
   logBatchSchema,
 } from './observability';
 export type { LogLevel, DeviceContext, LogEntry, LogBatch } from './observability';
+export { LogBuffer, LogChannel } from './log-channel';
+export type { SendFn, LogChannelOptions } from './log-channel';
