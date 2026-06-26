@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { LogBatch, LogEntry, DeviceContext } from "@valk/shared";
+import type { LogBatch, LogEntry, DeviceContext, Sidecar } from "@valk/shared";
+import type { TimeMap } from "./flash-detect";
 
 // Typage minimal maison de node:sqlite (évite de dépendre de @types/node récents).
 interface SqliteStatement {
@@ -36,10 +37,33 @@ export interface StoredLog extends LogEntry {
   id: number;
 }
 
+export interface CaptureRecord {
+  id: string;
+  sessionId: string;
+  createdAt: number;
+  clipPath: string;
+  size: number | null;
+  sidecar: Sidecar;
+  timeMap: TimeMap | null;
+  status: string;
+}
+
+export interface CaptureSummary {
+  id: string;
+  sessionId: string;
+  createdAt: number;
+  size: number | null;
+  timeMap: TimeMap | null;
+  status: string;
+}
+
 export interface ObservabilityStore {
   insertLogs(batch: LogBatch): void;
   listSessions(): SessionSummary[];
   getSessionLogs(sid: string): StoredLog[];
+  insertCapture(rec: CaptureRecord): void;
+  listCaptures(): CaptureSummary[];
+  getCapture(id: string): CaptureRecord | null;
 }
 
 function migrate(db: SqliteDb): void {
@@ -61,6 +85,17 @@ function migrate(db: SqliteDb): void {
       data         TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_logs_session ON logs(session_id, id);
+    CREATE TABLE IF NOT EXISTS captures (
+      id         TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      clip_path  TEXT NOT NULL,
+      size       INTEGER,
+      sidecar    TEXT NOT NULL,
+      time_map   TEXT,
+      status     TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_captures_created ON captures(created_at DESC);
   `);
 }
 
@@ -97,6 +132,14 @@ export function createSqliteStore(path: string): ObservabilityStore {
   const selLogs = db.prepare(
     `SELECT * FROM logs WHERE session_id = ? ORDER BY id ASC`,
   );
+  const insCapture = db.prepare(`
+    INSERT INTO captures (id, session_id, created_at, clip_path, size, sidecar, time_map, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const selCaptures = db.prepare(
+    `SELECT id, session_id, created_at, size, time_map, status FROM captures ORDER BY created_at DESC`,
+  );
+  const selCapture = db.prepare(`SELECT * FROM captures WHERE id = ?`);
 
   return {
     insertLogs(batch) {
@@ -135,6 +178,42 @@ export function createSqliteStore(path: string): ObservabilityStore {
         message: r.message as string,
         data: r.data != null ? JSON.parse(r.data as string) : undefined,
       }));
+    },
+    insertCapture(rec) {
+      insCapture.run(
+        rec.id,
+        rec.sessionId,
+        rec.createdAt,
+        rec.clipPath,
+        rec.size,
+        JSON.stringify(rec.sidecar),
+        rec.timeMap ? JSON.stringify(rec.timeMap) : null,
+        rec.status,
+      );
+    },
+    listCaptures() {
+      return (selCaptures.all() as Record<string, unknown>[]).map((r) => ({
+        id: r.id as string,
+        sessionId: r.session_id as string,
+        createdAt: r.created_at as number,
+        size: (r.size as number | null) ?? null,
+        timeMap: r.time_map != null ? (JSON.parse(r.time_map as string) as TimeMap) : null,
+        status: r.status as string,
+      }));
+    },
+    getCapture(id) {
+      const r = selCapture.get(id) as Record<string, unknown> | undefined;
+      if (!r) return null;
+      return {
+        id: r.id as string,
+        sessionId: r.session_id as string,
+        createdAt: r.created_at as number,
+        clipPath: r.clip_path as string,
+        size: (r.size as number | null) ?? null,
+        sidecar: JSON.parse(r.sidecar as string) as Sidecar,
+        timeMap: r.time_map != null ? (JSON.parse(r.time_map as string) as TimeMap) : null,
+        status: r.status as string,
+      };
     },
   };
 }

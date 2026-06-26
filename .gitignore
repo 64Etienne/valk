@@ -45,6 +45,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local data store (raw media + sqlite) — never committed
-/data/
+# local data store (raw media + sqlite) — never committed (à toute profondeur)
+data/
 .playwright-mcp/

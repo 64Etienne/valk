@@ -76,10 +76,52 @@ export default async function DebugPage({
   const store = getStore();
   const sessions = store.listSessions();
   const logs = sid ? store.getSessionLogs(sid) : [];
-  const href = (s: string) => `/debug?key=${encodeURIComponent(key ?? "")}&sid=${encodeURIComponent(s)}`;
+  const captures = store.listCaptures();
+  const keyParam = encodeURIComponent(key ?? "");
+  const href = (s: string) => `/debug?key=${keyParam}&sid=${encodeURIComponent(s)}`;
 
   return (
     <Shell>
+      {captures.length > 0 && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            Captures ({captures.length})
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {captures.map((c) => (
+              <div key={c.id} className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-mono text-xs text-zinc-300">{c.id}</span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ring-1 ${
+                      c.timeMap?.status === "verified"
+                        ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                        : "bg-amber-500/15 text-amber-300 ring-amber-500/30"
+                    }`}
+                  >
+                    {c.timeMap?.status ?? "—"}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+                  <span>{c.size != null ? (c.size / (1024 * 1024)).toFixed(1) + " Mo" : "—"}</span>
+                  {c.timeMap && (
+                    <span className="font-mono">
+                      a={c.timeMap.a.toFixed(3)} b={c.timeMap.b.toFixed(0)}
+                    </span>
+                  )}
+                  <span>{rel(c.createdAt)}</span>
+                </div>
+                <a
+                  href={`/api/captures/${encodeURIComponent(c.id)}/clip?key=${keyParam}`}
+                  className="mt-2 inline-block text-xs text-violet-300 hover:underline"
+                >
+                  ▶ clip
+                </a>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[20rem_1fr]">
         {/* Sessions */}
         <aside className="space-y-2">
