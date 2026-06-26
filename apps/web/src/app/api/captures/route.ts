@@ -10,8 +10,12 @@ export const runtime = "nodejs";
 // Lu au runtime (pas en const d'import) pour rester surchargeable en test.
 const mediaRoot = (): string => process.env.VALK_MEDIA_DIR || "data/media";
 
+const MAX_CLIP_BYTES = 300 * 1024 * 1024;
+
+/** id = nom de dossier → sanitize du sessionId (anti path-traversal : pas de `/`, `..`). */
 function newCaptureId(sessionId: string): string {
-  return `${sessionId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48) || "anon";
+  return `${safe}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
 /**
@@ -19,6 +23,7 @@ function newCaptureId(sessionId: string): string {
  * Stocke le clip + sidecar sur disque, détecte les flashs → time-map, persiste en SQLite.
  */
 export async function POST(request: Request) {
+  if (!checkDebugKey(request)) return unauthorized();
   let form: FormData;
   try {
     form = await request.formData();
@@ -30,6 +35,9 @@ export async function POST(request: Request) {
   const sessionId = (form.get("sessionId") as string) || "anon";
   if (!(clip instanceof File) || typeof sidecarStr !== "string") {
     return Response.json({ ok: false, error: "clip + sidecar requis" }, { status: 400 });
+  }
+  if (clip.size > MAX_CLIP_BYTES) {
+    return Response.json({ ok: false, error: "clip trop volumineux" }, { status: 413 });
   }
   let sidecar;
   try {

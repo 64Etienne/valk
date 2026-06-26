@@ -59,7 +59,7 @@ describe("/api/captures", () => {
     form.append("clip", new File([new Uint8Array(clipBuf)], "clip.mov", { type: "video/quicktime" }));
     form.append("sidecar", JSON.stringify(sidecar()));
     form.append("sessionId", "s1");
-    const res = await POST(new Request("http://localhost/api/captures", { method: "POST", body: form }));
+    const res = await POST(new Request("http://localhost/api/captures", { method: "POST", body: form, headers: { "x-valk-debug-key": "testkey" } }));
     expect(res.status).toBe(200);
     const j = await res.json();
     expect(j.ok).toBe(true);
@@ -80,7 +80,15 @@ describe("/api/captures", () => {
   it("POST sans sidecar → 400", async () => {
     const form = new FormData();
     form.append("clip", new File([new Uint8Array(clipBuf)], "clip.mov", { type: "video/quicktime" }));
-    const res = await POST(new Request("http://localhost/api/captures", { method: "POST", body: form }));
+    const res = await POST(new Request("http://localhost/api/captures", { method: "POST", body: form, headers: { "x-valk-debug-key": "testkey" } }));
     expect(res.status).toBe(400);
+  });
+
+  it("POST sans clé → 401", async () => {
+    const form = new FormData();
+    form.append("clip", new File([new Uint8Array(clipBuf)], "clip.mov", { type: "video/quicktime" }));
+    form.append("sidecar", JSON.stringify(sidecar()));
+    const res = await POST(new Request("http://localhost/api/captures", { method: "POST", body: form }));
+    expect(res.status).toBe(401);
   });
 });
