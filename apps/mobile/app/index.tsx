@@ -28,9 +28,15 @@ export default function Home() {
 
       <Pressable
         style={({ pressed }) => [styles.buttonPrimary, pressed && styles.buttonPressed]}
+        onPress={() => router.push("/protocol")}
+      >
+        <Text style={styles.buttonPrimaryText}>Capture guidée</Text>
+      </Pressable>
+      <Pressable
+        style={({ pressed }) => [styles.buttonSecondary, pressed && styles.buttonPressed]}
         onPress={() => router.push("/capture")}
       >
-        <Text style={styles.buttonPrimaryText}>Démarrer une capture</Text>
+        <Text style={styles.buttonText}>Capture libre (test)</Text>
       </Pressable>
 
       <Pressable style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]} onPress={onTest}>
@@ -57,6 +63,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   buttonPrimaryText: { color: "#ffffff", fontSize: 18, fontWeight: "800", letterSpacing: 0.3 },
+  buttonSecondary: {
+    marginTop: 14,
+    backgroundColor: "rgba(124,58,237,0.18)",
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
   button: {
     marginTop: 28,
     backgroundColor: "rgba(124,58,237,0.18)",
