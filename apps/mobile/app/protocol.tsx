@@ -3,6 +3,7 @@ import { ActivityIndicator, Dimensions, Pressable, StyleSheet, Text, View } from
 import { useRouter } from "expo-router";
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
+import Constants from "expo-constants";
 import * as Brightness from "expo-brightness";
 import { File } from "expo-file-system";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -54,7 +55,8 @@ export default function Protocol() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [flashOn, setFlashOn] = useState(false);
   const [stimulus, setStimulus] = useState<StimulusModel | null>(null);
-  const [clip, setClip] = useState<{ uri: string; size: number | null; summary: string } | null>(null);
+  const [clip, setClip] = useState<{ uri: string; size: number | null; summary: string; sidecar: Sidecar } | null>(null);
+  const [upload, setUpload] = useState<{ state: "idle" | "uploading" | "done" | "error"; msg?: string }>({ state: "idle" });
   const prevBrightness = useRef<number | null>(null);
 
   const brightnessMax = async () => {
@@ -65,6 +67,38 @@ export default function Protocol() {
     if (prevBrightness.current != null) {
       await Brightness.setBrightnessAsync(prevBrightness.current).catch(() => {});
       prevBrightness.current = null;
+    }
+  };
+
+  const uploadClip = async () => {
+    if (!clip) return;
+    const extra = Constants.expoConfig?.extra as { apiBaseUrl?: string; debugKey?: string } | undefined;
+    const base = extra?.apiBaseUrl ?? "";
+    if (!base) {
+      setUpload({ state: "error", msg: "serveur non configuré" });
+      return;
+    }
+    setUpload({ state: "uploading" });
+    try {
+      const form = new FormData();
+      form.append("clip", { uri: clip.uri, name: "clip.mov", type: "video/quicktime" } as unknown as Blob);
+      form.append("sidecar", JSON.stringify(clip.sidecar));
+      form.append("sessionId", clip.sidecar.sessionId);
+      const res = await fetch(`${base.replace(/\/$/, "")}/api/captures`, {
+        method: "POST",
+        body: form,
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+          ...(extra?.debugKey ? { "x-valk-debug-key": extra.debugKey } : {}),
+        },
+      });
+      const j = (await res.json()) as { ok?: boolean; captureId?: string; timeMap?: { status?: string } };
+      if (!res.ok || !j.ok) throw new Error(`HTTP ${res.status}`);
+      logger.info("protocol", "upload.done", { captureId: j.captureId, sync: j.timeMap?.status });
+      setUpload({ state: "done", msg: `Envoyé · sync ${j.timeMap?.status ?? "?"}` });
+    } catch (e) {
+      logger.captureException(e, { where: "uploadClip" });
+      setUpload({ state: "error", msg: "échec de l'envoi" });
     }
   };
 
@@ -155,9 +189,11 @@ export default function Protocol() {
         durMs,
         sidecarUri,
       });
+      setUpload({ state: "idle" });
       setClip({
         uri: result.uri,
         size,
+        sidecar,
         summary: `Sidecar OK · ${markers.length} flashs · stimulus ${STIMULUS_MS / 1000}s · ${
           size != null ? (size / (1024 * 1024)).toFixed(1) + " Mo" : "—"
         }`,
@@ -206,6 +242,8 @@ export default function Protocol() {
       <Playback
         uri={clip.uri}
         info={clip.summary}
+        upload={upload}
+        onUpload={uploadClip}
         onRedo={() => {
           setClip(null);
           setPhase("idle");
@@ -243,11 +281,15 @@ export default function Protocol() {
 function Playback({
   uri,
   info,
+  upload,
+  onUpload,
   onRedo,
   onDone,
 }: {
   uri: string;
   info: string;
+  upload: { state: "idle" | "uploading" | "done" | "error"; msg?: string };
+  onUpload: () => void;
   onRedo: () => void;
   onDone: () => void;
 }) {
@@ -263,13 +305,37 @@ function Playback({
         <View style={styles.topBar}>
           <Text style={styles.meta}>{info}</Text>
         </View>
-        <View style={styles.controlsRow}>
-          <Pressable style={({ pressed }) => [styles.button, pressed && styles.pressed]} onPress={onRedo}>
-            <Text style={styles.buttonText}>Refaire</Text>
-          </Pressable>
-          <Pressable style={({ pressed }) => [styles.buttonGhost, pressed && styles.pressed]} onPress={onDone}>
-            <Text style={styles.buttonText}>Terminé</Text>
-          </Pressable>
+        <View style={styles.bottomStack}>
+          {upload.state !== "done" && (
+            <Pressable
+              style={({ pressed }) => [styles.startBtn, (pressed || upload.state === "uploading") && styles.pressed]}
+              onPress={onUpload}
+              disabled={upload.state === "uploading"}
+            >
+              <Text style={styles.startText}>
+                {upload.state === "uploading" ? "Envoi…" : "Envoyer au serveur"}
+              </Text>
+            </Pressable>
+          )}
+          {upload.msg && (
+            <Text
+              style={[
+                styles.uploadMsg,
+                upload.state === "error" && styles.uploadErr,
+                upload.state === "done" && styles.uploadOk,
+              ]}
+            >
+              {upload.msg}
+            </Text>
+          )}
+          <View style={styles.controlsRow}>
+            <Pressable style={({ pressed }) => [styles.button, pressed && styles.pressed]} onPress={onRedo}>
+              <Text style={styles.buttonText}>Refaire</Text>
+            </Pressable>
+            <Pressable style={({ pressed }) => [styles.buttonGhost, pressed && styles.pressed]} onPress={onDone}>
+              <Text style={styles.buttonText}>Terminé</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
     </View>
@@ -283,6 +349,10 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20 },
   controls: { alignItems: "center", gap: 12, paddingHorizontal: 20 },
   controlsRow: { flexDirection: "row", justifyContent: "center", gap: 14, paddingHorizontal: 20 },
+  bottomStack: { alignItems: "center", gap: 12, paddingHorizontal: 20 },
+  uploadMsg: { color: "#e5e7eb", fontSize: 13, fontWeight: "600" },
+  uploadErr: { color: "#f87171" },
+  uploadOk: { color: "#34d399" },
   flash: { ...StyleSheet.absoluteFillObject, backgroundColor: "#ffffff" },
   dot: { position: "absolute", width: DOT, height: DOT, borderRadius: DOT / 2, backgroundColor: "#a78bfa", borderWidth: 2, borderColor: "#fff" },
   title: { color: "#c4b5fd", fontSize: 24, fontWeight: "800", marginBottom: 12 },

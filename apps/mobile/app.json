@@ -32,6 +32,7 @@
     ],
     "extra": {
       "apiBaseUrl": "",
+      "debugKey": "",
       "sentryDsn": "https://1e5d110c508e84cc2d4e713e8a71aea2@o4511585127628800.ingest.de.sentry.io/4511585151877200",
       "router": {},
       "eas": {
