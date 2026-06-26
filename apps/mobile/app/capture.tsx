@@ -167,8 +167,10 @@ function Playback({
   onRedo: () => void;
   onDone: () => void;
 }) {
-  const player = useVideoPlayer(uri, (p) => {
+  const player = useVideoPlayer({ uri }, (p) => {
     p.loop = true;
+    p.muted = false;
+    p.play();
   });
 
   return (
