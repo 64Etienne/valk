@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { LogBatch, LogEntry, DeviceContext, Sidecar } from "@valk/shared";
 import type { TimeMap } from "./flash-detect";
+import type { GazeSignal } from "../analysis/gaze";
 
 // Typage minimal maison de node:sqlite (évite de dépendre de @types/node récents).
 interface SqliteStatement {
@@ -46,6 +47,7 @@ export interface CaptureRecord {
   sidecar: Sidecar;
   timeMap: TimeMap | null;
   status: string;
+  analysis: GazeSignal | null;
 }
 
 export interface CaptureSummary {
@@ -55,6 +57,7 @@ export interface CaptureSummary {
   size: number | null;
   timeMap: TimeMap | null;
   status: string;
+  analysis: GazeSignal | null;
 }
 
 export interface ObservabilityStore {
@@ -64,6 +67,7 @@ export interface ObservabilityStore {
   insertCapture(rec: CaptureRecord): void;
   listCaptures(): CaptureSummary[];
   getCapture(id: string): CaptureRecord | null;
+  setCaptureAnalysis(id: string, analysis: GazeSignal): void;
 }
 
 function migrate(db: SqliteDb): void {
@@ -97,6 +101,12 @@ function migrate(db: SqliteDb): void {
     );
     CREATE INDEX IF NOT EXISTS idx_captures_created ON captures(created_at DESC);
   `);
+  // colonne ajoutée après coup (B1) : ALTER échoue si déjà présente → on ignore.
+  try {
+    db.exec(`ALTER TABLE captures ADD COLUMN analysis TEXT`);
+  } catch {
+    /* colonne déjà présente */
+  }
 }
 
 /**
@@ -137,9 +147,10 @@ export function createSqliteStore(path: string): ObservabilityStore {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const selCaptures = db.prepare(
-    `SELECT id, session_id, created_at, size, time_map, status FROM captures ORDER BY created_at DESC`,
+    `SELECT id, session_id, created_at, size, time_map, status, analysis FROM captures ORDER BY created_at DESC`,
   );
   const selCapture = db.prepare(`SELECT * FROM captures WHERE id = ?`);
+  const updAnalysis = db.prepare(`UPDATE captures SET analysis = ? WHERE id = ?`);
 
   return {
     insertLogs(batch) {
@@ -199,6 +210,7 @@ export function createSqliteStore(path: string): ObservabilityStore {
         size: (r.size as number | null) ?? null,
         timeMap: r.time_map != null ? (JSON.parse(r.time_map as string) as TimeMap) : null,
         status: r.status as string,
+        analysis: r.analysis != null ? (JSON.parse(r.analysis as string) as GazeSignal) : null,
       }));
     },
     getCapture(id) {
@@ -213,7 +225,11 @@ export function createSqliteStore(path: string): ObservabilityStore {
         sidecar: JSON.parse(r.sidecar as string) as Sidecar,
         timeMap: r.time_map != null ? (JSON.parse(r.time_map as string) as TimeMap) : null,
         status: r.status as string,
+        analysis: r.analysis != null ? (JSON.parse(r.analysis as string) as GazeSignal) : null,
       };
+    },
+    setCaptureAnalysis(id, analysis) {
+      updAnalysis.run(JSON.stringify(analysis), id);
     },
   };
 }

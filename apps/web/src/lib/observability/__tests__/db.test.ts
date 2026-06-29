@@ -51,4 +51,22 @@ describe("sqlite observability store", () => {
     expect(store.listSessions()).toHaveLength(2);
     expect(store.getSessionLogs("a")).toHaveLength(1);
   });
+
+  it("setCaptureAnalysis met à jour et relit l'analyse", () => {
+    const store = createSqliteStore(":memory:");
+    store.insertCapture({
+      id: "c1",
+      sessionId: "s1",
+      createdAt: 1,
+      clipPath: "/x/clip.mov",
+      size: 10,
+      sidecar: {} as never,
+      timeMap: null,
+      status: "verified",
+      analysis: null,
+    });
+    store.setCaptureAnalysis("c1", { points: [], r: 0.7, facePct: 100, signFlipped: true, status: "ok" });
+    expect(store.getCapture("c1")?.analysis?.r).toBeCloseTo(0.7);
+    expect(store.listCaptures()[0].analysis?.status).toBe("ok");
+  });
 });
