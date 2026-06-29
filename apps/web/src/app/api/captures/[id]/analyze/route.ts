@@ -1,0 +1,29 @@
+import { getStore } from "@/lib/observability/db";
+import { runExtraction, buildSignal } from "@/lib/analysis/gaze";
+import { checkDebugKey, unauthorized } from "@/lib/observability/auth";
+
+export const runtime = "nodejs";
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!checkDebugKey(request)) return unauthorized();
+  const { id } = await params;
+  const cap = getStore().getCapture(id);
+  if (!cap) return Response.json({ ok: false, error: "not found" }, { status: 404 });
+  try {
+    const extraction = await runExtraction(cap.clipPath);
+    const timeMap = cap.timeMap ?? { a: 1, b: 0, anchors: 0, status: "sync_unverified" as const };
+    const signal = buildSignal(extraction, cap.sidecar, timeMap);
+    getStore().setCaptureAnalysis(id, signal);
+    return Response.json({
+      ok: true,
+      status: signal.status,
+      r: signal.r,
+      facePct: signal.facePct,
+      signFlipped: signal.signFlipped,
+    });
+  } catch (e) {
+    console.error("VALK analyze failed:", e);
+    getStore().setCaptureAnalysis(id, { points: [], r: 0, facePct: 0, signFlipped: false, status: "failed" });
+    return Response.json({ ok: false, error: "analyse échouée" }, { status: 500 });
+  }
+}

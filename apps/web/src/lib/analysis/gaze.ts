@@ -1,17 +1,37 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
 import { pursuitX, type Sidecar } from "@valk/shared";
 import type { TimeMap } from "../observability/flash-detect";
 
 const execFileP = promisify(execFile);
 
-const VISION_PY = (): string => process.env.VALK_VISION_PYTHON || "tools/vision/.venv/bin/python";
-const EXTRACT = "tools/vision/extract_gaze.py";
-const MODEL = "tools/vision/models/face_landmarker.task";
+/** Racine du repo (où vit `tools/vision/`) — l'app tourne avec cwd=apps/web. */
+function repoRoot(): string {
+  let dir = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    if (existsSync(resolve(dir, "tools/vision"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return process.cwd();
+}
+
+export function visionPython(): string {
+  return process.env.VALK_VISION_PYTHON || resolve(repoRoot(), "tools/vision/.venv/bin/python");
+}
+export function visionModel(): string {
+  return resolve(repoRoot(), "tools/vision/models/face_landmarker.task");
+}
+function extractScript(): string {
+  return resolve(repoRoot(), "tools/vision/extract_gaze.py");
+}
 
 /** Lance le venv python + extract_gaze.py (execFile, pas de shell) et parse le JSON. */
 export async function runExtraction(clipPath: string): Promise<Extraction> {
-  const { stdout } = await execFileP(VISION_PY(), [EXTRACT, clipPath, MODEL], {
+  const { stdout } = await execFileP(visionPython(), [extractScript(), clipPath, visionModel()], {
     maxBuffer: 64 * 1024 * 1024,
     timeout: 120_000,
   });
