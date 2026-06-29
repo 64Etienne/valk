@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { isAuthorizedKey } from "@/lib/observability/auth";
 import { getStore } from "@/lib/observability/db";
+import { AnalyzeButton } from "./AnalyzeButton";
+import { GazeChart } from "./GazeChart";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -117,6 +119,35 @@ export default async function DebugPage({
                 >
                   ▶ clip
                 </a>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <AnalyzeButton id={c.id} keyParam={keyParam} />
+                  {c.analysis && (
+                    <span className="text-xs text-zinc-400">
+                      sync {c.analysis.status} · r={c.analysis.r.toFixed(2)} · visage{" "}
+                      {c.analysis.facePct.toFixed(0)}%
+                      {c.analysis.signFlipped ? " · signe auto-aligné" : ""}
+                    </span>
+                  )}
+                </div>
+                {c.analysis && c.analysis.points.length > 0 && (
+                  <div className="mt-2">
+                    <GazeChart signal={c.analysis} />
+                    <div className="mt-1 flex items-center gap-3 text-[11px] text-zinc-500">
+                      <span>
+                        <span style={{ color: "#a78bfa" }}>■</span> stimulus
+                      </span>
+                      <span>
+                        <span style={{ color: "#2dd4bf" }}>■</span> regard
+                      </span>
+                      <a
+                        className="text-violet-300 hover:underline"
+                        href={`/api/captures/${encodeURIComponent(c.id)}/overlay?key=${keyParam}`}
+                      >
+                        ▶ overlay
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
