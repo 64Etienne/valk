@@ -18,16 +18,27 @@ poursuite est réelle, avant toute métrique.
   de rattrapage), calibration du gaze absolu.
 - YAGNI : on regarde le signal avant de le résumer.
 
+## Validation préalable (faite — dé-risquage avant le plan)
+
+Vérifié sur les 2 clips iPhone réels déjà uploadés, **avant** d'écrire le plan :
+- **Env** : `venv` 3.12 via `uv` + `mediapipe 0.10.35` (API Tasks) + `opencv 4.13` : OK. Modèle
+  `face_landmarker.task` (3.8 Mo) → **478 landmarks, visage détecté 100 %** des frames.
+- **Signal** : iris-relatif-au-visage **suit le stimulus** (`r≈0.68` brut, **0.70 lissé**, consistant
+  sur les 2 clips), avec un léger **retard** = dynamique de poursuite réelle. L'iris-dans-l'œil ne suit
+  pas (`r≈0.08`) → écarté. Head-yaw négligeable (poursuite faite aux yeux).
+- Pipeline d'alignement (flashs → time-map → `pursuitX`) tourne de bout en bout sur le clip réel.
+
+⇒ La formule `gazeH` ci-dessous est la **version validée**, pas une hypothèse.
+
 ## Architecture (frontières nettes : vision isolée en Python, temps/orchestration en Node)
 
 ### `tools/vision/` — la vision (Python, venv 3.12 isolé)
 - `extract_gaze.py <clip.mov>` → **stdout JSON** : `{ fps, width, height, frames: [{ t, gazeH, irisPx:[x,y], ok }] }`.
-  - MediaPipe FaceMesh (`refine_landmarks=True`, `max_num_faces=1`), lecture frames + timestamps via OpenCV.
-  - `gazeH` = moyenne des ratios horizontaux de l'iris entre coins, par œil :
-    - œil gauche-image : interne `133`, externe `33`, iris `468` → `(iris_x − 133_x)/(33_x − 133_x)`
-    - œil droit-image : interne `362`, externe `263`, iris `473` → `(iris_x − 362_x)/(263_x − 362_x)`
+  - **MediaPipe Tasks `FaceLandmarker`** (modèle `face_landmarker.task`, `running_mode=VIDEO`, `num_faces=1`, **478 landmarks dont iris**). Lecture frames + timestamps via OpenCV (`cv2.VideoCapture`, timestamp = `idx/fps`). NB : mediapipe 0.10.35 n'expose **pas** l'API `solutions` (FaceMesh) → API Tasks obligatoire.
+  - **`gazeH` = iris relatif à la largeur du VISAGE** (validé sur clips réels, cf. ci-dessous) :
+    `gazeH = (irisX − faceLeftX) / (faceRightX − faceLeftX)`, avec `irisX` = moyenne des x des centres d'iris `468`/`473`, `faceLeftX = lm[234].x`, `faceRightX = lm[454].x`.
+    ⚠️ **PAS** l'iris-dans-l'œil (ratio entre coins `33/133/362/263`) : testé → `r≈0.08`, **inutilisable** (coins trop bruités). L'iris-relatif-au-visage donne `r≈0.68`.
   - `irisPx` = pixel de l'iris (pour l'overlay). `ok=false` si pas de visage sur la frame.
-  - (Indices landmarks à confirmer à l'implémentation : la viz sur clip réel révèle toute erreur.)
 - `draw_overlay.py <clip.mov> <signal.json> <out.mp4>` → dessine par frame le point iris +
   un repère de la position du stimulus (depuis `signal.json`) → `overlay.mp4`.
 - Env : `tools/vision/.venv` (gitignoré), créé par `tools/vision/setup.sh` (`uv venv --python 3.12`
@@ -38,11 +49,13 @@ poursuite est réelle, avant toute métrique.
 - `apps/web/src/lib/analysis/gaze.ts` :
   - `runExtraction(clipPath)` : `execFile(visionPython, ['extract_gaze.py', clipPath])` (pas de shell),
     parse le JSON, timeout 120 s, maxBuffer large.
-  - `buildSignal(frames, sidecar, timeMap)` : pour chaque frame à `t_v` (ms) →
-    `stim_ms = (t_v − b)/a` ; `stimulusX = pursuitX(model, stim_ms)` ; ne garde que la
-    fenêtre `[startMs, startMs+durationMs]`. Normalise `gazeH` (plage robuste p5–p95) et
-    `stimulusX` en [0,1]. Aligne le **signe** sur le stimulus par corrélation (drapeau
-    `signFlipped` exposé). Renvoie `{ points:[{t, stimulusX, gazeX, ok}], r, facePct, signFlipped }`.
+  - `buildSignal(frames, sidecar, timeMap)` : **lisse** `gazeH` (moyenne glissante CENTRÉE
+    w≈7 frames/~0.23 s — validé : améliore `r` de 0.68 à 0.70 ; éviter le bug bord-de-convolution).
+    Pour chaque frame à `t_v` (ms) → `stim_ms = (t_v − b)/a` ; `stimulusX = pursuitX(model, stim_ms)` ;
+    ne garde que la fenêtre `[startMs, startMs+durationMs]`. Normalise `gazeH` (plage robuste
+    p5–p95) et `stimulusX` en [0,1]. Aligne le **signe** sur le stimulus par corrélation
+    (drapeau `signFlipped` exposé — le miroir caméra donne un signe négatif). Renvoie
+    `{ points:[{t, stimulusX, gazeX, ok}], r, facePct, signFlipped }`.
 - **`POST /api/captures/[id]/analyze`** (`runtime nodejs`, gaté `VALK_DEBUG_KEY`) :
   charge la capture, lance extraction + `buildSignal`, stocke le signal, génère `overlay.mp4`.
   Si le time-map n'est pas `verified`, **analyse quand même** mais marque `status=sync_unverified`
@@ -107,5 +120,6 @@ overlay servi avec containment au dossier media (comme le clip).
 
 Couvre : extraction (Python), alignement (time-map inverse + `pursuitX`), visualisation
 (courbes + overlay + `r`), erreurs, tests, sécurité, env Python. Périmètre resserré (viz, pas
-de métriques → B2). Dépendances vérifiées : python3.13 présent mais mediapipe exige 3.9–3.12 →
-**venv 3.12 via `uv`** (à valider en première tâche du plan, comme ffmpeg pour A4).
+de métriques → B2). Dépendances **déjà montées et validées** : venv 3.12 (`uv`) + mediapipe 0.10.35
+(API Tasks) + opencv + modèle `face_landmarker.task`, signal de regard prouvé sur clips réels
+(`r≈0.70`). Le plan formalise ces scripts/endpoints, pas un pari technique.

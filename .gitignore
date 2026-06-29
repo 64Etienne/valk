@@ -48,3 +48,7 @@ next-env.d.ts
 # local data store (raw media + sqlite) — never committed (à toute profondeur)
 data/
 .playwright-mcp/
+
+# vision Python : venv + modèles téléchargés (régénérés par tools/vision/setup.sh)
+tools/vision/.venv/
+tools/vision/models/
