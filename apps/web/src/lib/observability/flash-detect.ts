@@ -41,11 +41,17 @@ export async function extractLuma(clipPath: string): Promise<{ t: number; y: num
  * (le flash illumine le visage : YAVG monte au-dessus du fond, pas jusqu'au blanc pur).
  */
 export function detectFlashes(luma: { t: number; y: number }[]): number[] {
-  if (luma.length < 3) return [];
-  const sorted = luma.map((p) => p.y).sort((a, b) => a - b);
+  if (luma.length < 10) return [];
+  const sorted = luma.map((p) => p.y).slice().sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
-  const p95 = sorted[Math.floor(sorted.length * 0.95)];
-  const threshold = median + Math.max(20, (p95 - median) * 0.5);
+  // Écart robuste (MAD) : le flash illumine un visage souvent DÉJÀ clair
+  // (auto-exposition iPhone) → il n'ajoute que ~4 unités de luminance. Seuil
+  // sensible : médiane + 8·robustStd, plancher 1.5. Validé sur clip iPhone réel
+  // (fond ~146.5, flashs ~150) ET sur vidéo synthétique (fond 16, flashs 235).
+  const devs = sorted.map((y) => Math.abs(y - median)).sort((a, b) => a - b);
+  const mad = devs[Math.floor(devs.length / 2)];
+  const robustStd = 1.4826 * mad;
+  const threshold = median + Math.max(1.5, 8 * robustStd);
   const edges: number[] = [];
   let above = false;
   for (const p of luma) {

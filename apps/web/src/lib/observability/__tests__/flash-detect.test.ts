@@ -62,4 +62,19 @@ describe("flash-detect", () => {
     const flat = Array.from({ length: 100 }, (_, i) => ({ t: i / 30, y: 50 }));
     expect(detectFlashes(flat)).toHaveLength(0);
   });
+
+  it("détecte des flashs SUBTILS (visage déjà clair, +4 unités, cas iPhone réel)", () => {
+    const luma: { t: number; y: number }[] = [];
+    for (let i = 0; i < 220; i++) {
+      const t = i / 30;
+      let y = 146.4 + (i % 4 === 0 ? 0.3 : 0); // fond serré ~146.5 + léger bruit
+      if (t >= 0.07 && t <= 0.2) y = 150;
+      if (t >= 7.0 && t <= 7.15) y = 150;
+      luma.push({ t, y });
+    }
+    const flashes = detectFlashes(luma);
+    expect(flashes).toHaveLength(2);
+    expect(flashes[0]).toBeCloseTo(0.07, 1);
+    expect(flashes[1]).toBeCloseTo(7.0, 1);
+  });
 });
