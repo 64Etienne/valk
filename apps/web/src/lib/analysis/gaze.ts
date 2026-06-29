@@ -1,5 +1,22 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { pursuitX, type Sidecar } from "@valk/shared";
 import type { TimeMap } from "../observability/flash-detect";
+
+const execFileP = promisify(execFile);
+
+const VISION_PY = (): string => process.env.VALK_VISION_PYTHON || "tools/vision/.venv/bin/python";
+const EXTRACT = "tools/vision/extract_gaze.py";
+const MODEL = "tools/vision/models/face_landmarker.task";
+
+/** Lance le venv python + extract_gaze.py (execFile, pas de shell) et parse le JSON. */
+export async function runExtraction(clipPath: string): Promise<Extraction> {
+  const { stdout } = await execFileP(VISION_PY(), [EXTRACT, clipPath, MODEL], {
+    maxBuffer: 64 * 1024 * 1024,
+    timeout: 120_000,
+  });
+  return JSON.parse(stdout) as Extraction;
+}
 
 export interface GazeFrame {
   t: number;
