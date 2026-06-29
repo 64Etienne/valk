@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
 import { pursuitX, type Sidecar } from "@valk/shared";
 import type { TimeMap } from "../observability/flash-detect";
 
@@ -28,6 +28,9 @@ export function visionModel(): string {
 function extractScript(): string {
   return resolve(repoRoot(), "tools/vision/extract_gaze.py");
 }
+function overlayScript(): string {
+  return resolve(repoRoot(), "tools/vision/draw_overlay.py");
+}
 
 /** Lance le venv python + extract_gaze.py (execFile, pas de shell) et parse le JSON. */
 export async function runExtraction(clipPath: string): Promise<Extraction> {
@@ -36,6 +39,24 @@ export async function runExtraction(clipPath: string): Promise<Extraction> {
     timeout: 120_000,
   });
   return JSON.parse(stdout) as Extraction;
+}
+
+/** Génère `overlay.mp4` à côté du clip (best-effort). Renvoie le chemin ou null si échec. */
+export async function generateOverlay(clipPath: string, signal: GazeSignal): Promise<string | null> {
+  try {
+    const dir = dirname(clipPath);
+    const sigPath = join(dir, "signal.json");
+    const outPath = join(dir, "overlay.mp4");
+    writeFileSync(sigPath, JSON.stringify(signal));
+    await execFileP(visionPython(), [overlayScript(), clipPath, sigPath, outPath, visionModel()], {
+      timeout: 120_000,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return outPath;
+  } catch (e) {
+    console.error("VALK overlay failed (non bloquant):", e);
+    return null;
+  }
 }
 
 export interface GazeFrame {

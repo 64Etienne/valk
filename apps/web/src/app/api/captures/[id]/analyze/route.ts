@@ -1,5 +1,5 @@
 import { getStore } from "@/lib/observability/db";
-import { runExtraction, buildSignal } from "@/lib/analysis/gaze";
+import { runExtraction, buildSignal, generateOverlay } from "@/lib/analysis/gaze";
 import { checkDebugKey, unauthorized } from "@/lib/observability/auth";
 
 export const runtime = "nodejs";
@@ -14,6 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const timeMap = cap.timeMap ?? { a: 1, b: 0, anchors: 0, status: "sync_unverified" as const };
     const signal = buildSignal(extraction, cap.sidecar, timeMap);
     getStore().setCaptureAnalysis(id, signal);
+    await generateOverlay(cap.clipPath, signal); // best-effort (gère ses erreurs)
     return Response.json({
       ok: true,
       status: signal.status,
