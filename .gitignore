@@ -52,3 +52,5 @@ data/
 # vision Python : venv + modèles téléchargés (régénérés par tools/vision/setup.sh)
 tools/vision/.venv/
 tools/vision/models/
+__pycache__/
+.pytest_cache/
