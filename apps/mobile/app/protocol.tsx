@@ -3,10 +3,7 @@ import { ActivityIndicator, Dimensions, Pressable, StyleSheet, Text, View } from
 import { useRouter } from "expo-router";
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import { useKeepAwake } from "expo-keep-awake";
-import Constants from "expo-constants";
-import * as Brightness from "expo-brightness";
 import { File } from "expo-file-system";
-import { useVideoPlayer, VideoView } from "expo-video";
 import {
   pursuitX,
   sidecarSchema,
@@ -16,6 +13,8 @@ import {
   type SyncMarker,
 } from "@valk/shared";
 import { logger } from "../src/observability/logger";
+import { saveSidecar, brightnessMax, restoreBrightness, uploadCapture } from "../src/capture/helpers";
+import { ClipPlayback } from "../src/capture/ClipPlayback";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const DOT = 28;
@@ -59,59 +58,11 @@ export default function Protocol() {
   const [upload, setUpload] = useState<{ state: "idle" | "uploading" | "done" | "error"; msg?: string }>({ state: "idle" });
   const prevBrightness = useRef<number | null>(null);
 
-  const brightnessMax = async () => {
-    prevBrightness.current = await Brightness.getBrightnessAsync().catch(() => null);
-    await Brightness.setBrightnessAsync(1).catch(() => {});
-  };
-  const restoreBrightness = async () => {
-    if (prevBrightness.current != null) {
-      await Brightness.setBrightnessAsync(prevBrightness.current).catch(() => {});
-      prevBrightness.current = null;
-    }
-  };
-
   const uploadClip = async () => {
     if (!clip) return;
-    const extra = Constants.expoConfig?.extra as { apiBaseUrl?: string; debugKey?: string } | undefined;
-    const base = extra?.apiBaseUrl ?? "";
-    if (!base) {
-      setUpload({ state: "error", msg: "serveur non configuré" });
-      return;
-    }
     setUpload({ state: "uploading" });
-    try {
-      const form = new FormData();
-      form.append("clip", { uri: clip.uri, name: "clip.mov", type: "video/quicktime" } as unknown as Blob);
-      form.append("sidecar", JSON.stringify(clip.sidecar));
-      form.append("sessionId", clip.sidecar.sessionId);
-      const res = await fetch(`${base.replace(/\/$/, "")}/api/captures`, {
-        method: "POST",
-        body: form,
-        headers: {
-          "ngrok-skip-browser-warning": "true",
-          ...(extra?.debugKey ? { "x-valk-debug-key": extra.debugKey } : {}),
-        },
-      });
-      const j = (await res.json()) as { ok?: boolean; captureId?: string; timeMap?: { status?: string } };
-      if (!res.ok || !j.ok) throw new Error(`HTTP ${res.status}`);
-      logger.info("protocol", "upload.done", { captureId: j.captureId, sync: j.timeMap?.status });
-      setUpload({ state: "done", msg: `Envoyé · sync ${j.timeMap?.status ?? "?"}` });
-    } catch (e) {
-      logger.captureException(e, { where: "uploadClip" });
-      setUpload({ state: "error", msg: "échec de l'envoi" });
-    }
-  };
-
-  const saveSidecar = (clipUri: string, sidecar: Sidecar): string => {
-    const uri = `${clipUri}.sidecar.json`;
-    const f = new File(uri);
-    try {
-      f.create();
-    } catch {
-      /* existe déjà */
-    }
-    f.write(JSON.stringify(sidecar));
-    return uri;
+    const r = await uploadCapture(clip.uri, clip.sidecar);
+    setUpload({ state: r.ok ? "done" : "error", msg: r.detail });
   };
 
   const runProtocol = async () => {
@@ -125,12 +76,12 @@ export default function Protocol() {
       logger.info("protocol", "capture.start", {});
 
       // Flash START
-      await brightnessMax();
+      await brightnessMax(prevBrightness);
       markers.push({ kind: "flash", edge: "start", scheduledMs: now(), durationMs: FLASH_MS });
       setFlashOn(true);
       await delay(FLASH_MS);
       setFlashOn(false);
-      await restoreBrightness();
+      await restoreBrightness(prevBrightness);
 
       // Stimulus de poursuite
       await delay(400);
@@ -148,12 +99,12 @@ export default function Protocol() {
 
       // Flash END
       await delay(400);
-      await brightnessMax();
+      await brightnessMax(prevBrightness);
       markers.push({ kind: "flash", edge: "end", scheduledMs: now(), durationMs: FLASH_MS });
       setFlashOn(true);
       await delay(FLASH_MS);
       setFlashOn(false);
-      await restoreBrightness();
+      await restoreBrightness(prevBrightness);
 
       // Stop + récupération
       camRef.current?.stopRecording();
@@ -200,7 +151,7 @@ export default function Protocol() {
       });
       setPhase("recorded");
     } catch (e) {
-      await restoreBrightness();
+      await restoreBrightness(prevBrightness);
       setFlashOn(false);
       setStimulus(null);
       logger.captureException(e, { where: "runProtocol" });
@@ -239,7 +190,7 @@ export default function Protocol() {
 
   if (phase === "recorded" && clip) {
     return (
-      <Playback
+      <ClipPlayback
         uri={clip.uri}
         info={clip.summary}
         upload={upload}
@@ -273,70 +224,6 @@ export default function Protocol() {
             <Text style={styles.hint}>2 flashs + suivez le point des yeux (~7s)</Text>
           </View>
         )}
-      </View>
-    </View>
-  );
-}
-
-function Playback({
-  uri,
-  info,
-  upload,
-  onUpload,
-  onRedo,
-  onDone,
-}: {
-  uri: string;
-  info: string;
-  upload: { state: "idle" | "uploading" | "done" | "error"; msg?: string };
-  onUpload: () => void;
-  onRedo: () => void;
-  onDone: () => void;
-}) {
-  const player = useVideoPlayer({ uri }, (p) => {
-    p.loop = true;
-    p.muted = false;
-    p.play();
-  });
-  return (
-    <View style={styles.fill}>
-      <VideoView style={styles.fill} player={player} nativeControls contentFit="contain" />
-      <View style={styles.overlay} pointerEvents="box-none">
-        <View style={styles.topBar}>
-          <Text style={styles.meta}>{info}</Text>
-        </View>
-        <View style={styles.bottomStack}>
-          {upload.state !== "done" && (
-            <Pressable
-              style={({ pressed }) => [styles.startBtn, (pressed || upload.state === "uploading") && styles.pressed]}
-              onPress={onUpload}
-              disabled={upload.state === "uploading"}
-            >
-              <Text style={styles.startText}>
-                {upload.state === "uploading" ? "Envoi…" : "Envoyer au serveur"}
-              </Text>
-            </Pressable>
-          )}
-          {upload.msg && (
-            <Text
-              style={[
-                styles.uploadMsg,
-                upload.state === "error" && styles.uploadErr,
-                upload.state === "done" && styles.uploadOk,
-              ]}
-            >
-              {upload.msg}
-            </Text>
-          )}
-          <View style={styles.controlsRow}>
-            <Pressable style={({ pressed }) => [styles.button, pressed && styles.pressed]} onPress={onRedo}>
-              <Text style={styles.buttonText}>Refaire</Text>
-            </Pressable>
-            <Pressable style={({ pressed }) => [styles.buttonGhost, pressed && styles.pressed]} onPress={onDone}>
-              <Text style={styles.buttonText}>Terminé</Text>
-            </Pressable>
-          </View>
-        </View>
       </View>
     </View>
   );
