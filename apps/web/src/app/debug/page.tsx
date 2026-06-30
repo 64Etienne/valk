@@ -3,6 +3,7 @@ import { isAuthorizedKey } from "@/lib/observability/auth";
 import { getStore } from "@/lib/observability/db";
 import { AnalyzeButton } from "./AnalyzeButton";
 import { GazeChart } from "./GazeChart";
+import { CalibChart } from "./CalibChart";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -145,6 +146,17 @@ export default async function DebugPage({
                       >
                         ▶ overlay
                       </a>
+                    </div>
+                  </div>
+                )}
+                {c.calibration && (
+                  <div className="mt-2">
+                    <span className="text-xs text-zinc-400">
+                      calibration {c.calibration.status} · R²={c.calibration.r2.toFixed(3)} ·{" "}
+                      {c.calibration.points.length} pts
+                    </span>
+                    <div className="mt-1">
+                      <CalibChart calib={c.calibration} />
                     </div>
                   </div>
                 )}
