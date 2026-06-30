@@ -34,6 +34,12 @@ export default function Home() {
       </Pressable>
       <Pressable
         style={({ pressed }) => [styles.buttonSecondary, pressed && styles.buttonPressed]}
+        onPress={() => router.push("/calibration")}
+      >
+        <Text style={styles.buttonText}>Calibration</Text>
+      </Pressable>
+      <Pressable
+        style={({ pressed }) => [styles.buttonSecondary, pressed && styles.buttonPressed]}
         onPress={() => router.push("/capture")}
       >
         <Text style={styles.buttonText}>Capture libre (test)</Text>
