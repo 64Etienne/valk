@@ -135,6 +135,9 @@ export function buildSignal(extraction: Extraction, sidecar: Sidecar, timeMap: T
   const { frames } = extraction;
   const facePct = (100 * frames.filter((f) => f.ok).length) / Math.max(1, frames.length);
   const model = sidecar.stimuli[0].model;
+  if (model.type !== "smooth_pursuit_h") {
+    return { points: [], r: 0, facePct, signFlipped: false, status: "failed" };
+  }
   const { a, b } = timeMap;
 
   // frames OK dans la fenêtre du stimulus

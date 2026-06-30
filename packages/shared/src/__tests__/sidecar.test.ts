@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { sidecarSchema, pursuitX, type StimulusModel } from "../index";
+import { sidecarSchema, stimulusModelSchema, pursuitX, type PursuitModel } from "../index";
 
-const model: StimulusModel = {
+const model: PursuitModel = {
   type: "smooth_pursuit_h",
   center: 0.5,
   amplitude: 0.4,
@@ -26,7 +26,9 @@ describe("sidecarSchema", () => {
   it("accepte un sidecar valide", () => {
     const p = sidecarSchema.parse(validSidecar);
     expect(p.syncMarkers).toHaveLength(2);
-    expect(p.stimuli[0].model.cycles).toBe(1.5);
+    const m0 = p.stimuli[0].model;
+    if (m0.type !== "smooth_pursuit_h") throw new Error("expected pursuit");
+    expect(m0.cycles).toBe(1.5);
   });
   it("rejette un marqueur sans edge", () => {
     const bad = {
@@ -58,5 +60,36 @@ describe("pursuitX", () => {
       expect(x).toBeGreaterThanOrEqual(0.1 - 1e-9);
       expect(x).toBeLessThanOrEqual(0.9 + 1e-9);
     }
+  });
+});
+
+describe("fixation_h", () => {
+  it("sidecar accepte un stimulus de fixation", () => {
+    const sc = {
+      schemaVersion: 1,
+      sessionId: "c",
+      clock: { domain: "performance.now", t0Monotonic: 0, t0Wall: 1 },
+      recording: { requestedQuality: "720p", mirror: false },
+      syncMarkers: [
+        { kind: "flash", edge: "start", scheduledMs: 0, durationMs: 200 },
+        { kind: "flash", edge: "end", scheduledMs: 9000, durationMs: 200 },
+      ],
+      stimuli: [
+        {
+          type: "fixation_h",
+          model: { type: "fixation_h", points: [{ x: 0.1, startMs: 500, durMs: 1500 }] },
+          samples: [],
+        },
+      ],
+    };
+    expect(() => sidecarSchema.parse(sc)).not.toThrow();
+  });
+  it("rejette un point de fixation sans x", () => {
+    expect(() => stimulusModelSchema.parse({ type: "fixation_h", points: [{ startMs: 0, durMs: 1 }] })).toThrow();
+  });
+  it("accepte toujours un modèle de poursuite (rétro-compat)", () => {
+    expect(() =>
+      stimulusModelSchema.parse({ type: "smooth_pursuit_h", center: 0.5, amplitude: 0.4, cycles: 1.5, startMs: 0, durationMs: 6000 }),
+    ).not.toThrow();
   });
 });

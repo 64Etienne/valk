@@ -12,7 +12,7 @@ import {
   sidecarSchema,
   SIDECAR_SCHEMA_VERSION,
   type Sidecar,
-  type StimulusModel,
+  type PursuitModel,
   type SyncMarker,
 } from "@valk/shared";
 import { logger } from "../src/observability/logger";
@@ -31,7 +31,7 @@ const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 type Phase = "idle" | "running" | "recorded";
 
 /** Point de poursuite piloté par requestAnimationFrame (position analytique pursuitX). */
-function PursuitDot({ model }: { model: StimulusModel }) {
+function PursuitDot({ model }: { model: PursuitModel }) {
   const [x, setX] = useState(model.center);
   useEffect(() => {
     let raf = 0;
@@ -54,7 +54,7 @@ export default function Protocol() {
   const camRef = useRef<CameraView>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [flashOn, setFlashOn] = useState(false);
-  const [stimulus, setStimulus] = useState<StimulusModel | null>(null);
+  const [stimulus, setStimulus] = useState<PursuitModel | null>(null);
   const [clip, setClip] = useState<{ uri: string; size: number | null; summary: string; sidecar: Sidecar } | null>(null);
   const [upload, setUpload] = useState<{ state: "idle" | "uploading" | "done" | "error"; msg?: string }>({ state: "idle" });
   const prevBrightness = useRef<number | null>(null);
@@ -134,7 +134,7 @@ export default function Protocol() {
 
       // Stimulus de poursuite
       await delay(400);
-      const model: StimulusModel = {
+      const model: PursuitModel = {
         type: "smooth_pursuit_h",
         center: 0.5,
         amplitude: 0.4,
