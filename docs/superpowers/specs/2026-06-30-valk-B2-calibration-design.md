@@ -25,12 +25,19 @@ La **fixation** d'un point statique est précise (pas de problème de gain), don
 mapping `gazeH→x` fiable. Calibrer sur les extrêmes de la poursuite elle-même serait
 **circulaire** (supposerait le gain qu'on veut mesurer). D'où une capture séparée.
 
-## ⚠️ Caveat validé en amont (prototype B1)
+## Dé-risquage (fait — pseudo-calibration sur clips réels)
 
-L'iris-relatif-au-visage ne varie que de **~0.035** sur tout le balayage horizontal → 5 points
-espacés de ~0.009. La **médiane sur ~1 s de fixation** (~30 frames) lisse le bruit ; le **R²
-du fit est le juge** de la faisabilité, mesuré sur la capture réelle. R² bas ⇒ on ajuste
-(plus de points / fixations plus longues). Honnête, pas caché.
+Avant le plan, une **pseudo-calibration** depuis les captures de poursuite (médiane du `gazeH`
+groupée par position du stimulus) donne un mapping `gazeH→x` **monotone et fittable** :
+- **R² = 0.973** (clip 1) et **0.880** (clip 2). Les médianes par point sont stables (IQR
+  0.0007–0.008 ≪ écart entre points), malgré la faible dynamique (~0.01).
+- Estimation **pessimiste** : la poursuite **sous-tire** aux extrêmes (clip 2 non-monotone à
+  x=0.9), ce que la **fixation** évite → la vraie calibration sera **au moins aussi bonne** (R² ≥ ~0.9 attendu).
+- Confirme le sens : `gazeH` **décroît** quand x croît (pente m ≈ −70 à −83 ; cohérent avec le miroir/`signFlipped` de B1).
+
+⇒ La calibration dédiée est **viable**, et le dé-risquage **justifie** le choix fixation-vs-implicite
+(le sous-tirage en poursuite casserait une calibration implicite). Le **R² réel reste le juge** ;
+R² bas ⇒ ajuster (plus de points / fixations plus longues).
 
 ## Architecture
 
