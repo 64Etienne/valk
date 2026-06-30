@@ -71,6 +71,7 @@ export async function POST(request: Request) {
     timeMap,
     status: timeMap?.status ?? "sync_unverified",
     analysis: null,
+    calibration: null,
   };
   getStore().insertCapture(rec);
   return Response.json({ ok: true, captureId: id, timeMap });

@@ -47,6 +47,7 @@ describe.skipIf(!clipDir)("/api/captures/[id]/analyze (clip réel)", () => {
       timeMap,
       status: timeMap.status,
       analysis: null,
+      calibration: null,
     });
   }, 60000);
 

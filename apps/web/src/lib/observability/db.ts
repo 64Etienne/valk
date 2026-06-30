@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import type { LogBatch, LogEntry, DeviceContext, Sidecar } from "@valk/shared";
 import type { TimeMap } from "./flash-detect";
 import type { GazeSignal } from "../analysis/gaze";
+import type { CalibrationResult } from "../analysis/calibration";
 
 // Typage minimal maison de node:sqlite (évite de dépendre de @types/node récents).
 interface SqliteStatement {
@@ -48,6 +49,7 @@ export interface CaptureRecord {
   timeMap: TimeMap | null;
   status: string;
   analysis: GazeSignal | null;
+  calibration: CalibrationResult | null;
 }
 
 export interface CaptureSummary {
@@ -58,6 +60,7 @@ export interface CaptureSummary {
   timeMap: TimeMap | null;
   status: string;
   analysis: GazeSignal | null;
+  calibration: CalibrationResult | null;
 }
 
 export interface ObservabilityStore {
@@ -68,6 +71,7 @@ export interface ObservabilityStore {
   listCaptures(): CaptureSummary[];
   getCapture(id: string): CaptureRecord | null;
   setCaptureAnalysis(id: string, analysis: GazeSignal): void;
+  setCaptureCalibration(id: string, calibration: CalibrationResult): void;
 }
 
 function migrate(db: SqliteDb): void {
@@ -104,6 +108,11 @@ function migrate(db: SqliteDb): void {
   // colonne ajoutée après coup (B1) : ALTER échoue si déjà présente → on ignore.
   try {
     db.exec(`ALTER TABLE captures ADD COLUMN analysis TEXT`);
+  } catch {
+    /* colonne déjà présente */
+  }
+  try {
+    db.exec(`ALTER TABLE captures ADD COLUMN calibration TEXT`);
   } catch {
     /* colonne déjà présente */
   }
@@ -147,10 +156,11 @@ export function createSqliteStore(path: string): ObservabilityStore {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const selCaptures = db.prepare(
-    `SELECT id, session_id, created_at, size, time_map, status, analysis FROM captures ORDER BY created_at DESC`,
+    `SELECT id, session_id, created_at, size, time_map, status, analysis, calibration FROM captures ORDER BY created_at DESC`,
   );
   const selCapture = db.prepare(`SELECT * FROM captures WHERE id = ?`);
   const updAnalysis = db.prepare(`UPDATE captures SET analysis = ? WHERE id = ?`);
+  const updCalib = db.prepare(`UPDATE captures SET calibration = ? WHERE id = ?`);
 
   return {
     insertLogs(batch) {
@@ -211,6 +221,7 @@ export function createSqliteStore(path: string): ObservabilityStore {
         timeMap: r.time_map != null ? (JSON.parse(r.time_map as string) as TimeMap) : null,
         status: r.status as string,
         analysis: r.analysis != null ? (JSON.parse(r.analysis as string) as GazeSignal) : null,
+        calibration: r.calibration != null ? (JSON.parse(r.calibration as string) as CalibrationResult) : null,
       }));
     },
     getCapture(id) {
@@ -226,10 +237,14 @@ export function createSqliteStore(path: string): ObservabilityStore {
         timeMap: r.time_map != null ? (JSON.parse(r.time_map as string) as TimeMap) : null,
         status: r.status as string,
         analysis: r.analysis != null ? (JSON.parse(r.analysis as string) as GazeSignal) : null,
+        calibration: r.calibration != null ? (JSON.parse(r.calibration as string) as CalibrationResult) : null,
       };
     },
     setCaptureAnalysis(id, analysis) {
       updAnalysis.run(JSON.stringify(analysis), id);
+    },
+    setCaptureCalibration(id, calibration) {
+      updCalib.run(JSON.stringify(calibration), id);
     },
   };
 }
