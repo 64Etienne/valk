@@ -13,7 +13,7 @@ import {
   type SyncMarker,
 } from "@valk/shared";
 import { logger } from "../src/observability/logger";
-import { saveSidecar, brightnessMax, restoreBrightness, uploadCapture } from "../src/capture/helpers";
+import { saveSidecar, uploadCapture, useMaxBrightness } from "../src/capture/helpers";
 import { ClipPlayback } from "../src/capture/ClipPlayback";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
@@ -42,11 +42,12 @@ function PursuitDot({ model }: { model: PursuitModel }) {
     return () => cancelAnimationFrame(raf);
   }, [model]);
   const left = x * (SCREEN_W - DOT);
-  return <View style={[styles.dot, { left, top: SCREEN_H / 2 - DOT / 2 }]} />;
+  return <View style={[styles.dot, { left, top: SCREEN_H * 0.16 }]} />;
 }
 
 export default function Protocol() {
   useKeepAwake();
+  useMaxBrightness();
   const router = useRouter();
   const [camPerm, requestCam] = useCameraPermissions();
   const [micPerm, requestMic] = useMicrophonePermissions();
@@ -56,7 +57,6 @@ export default function Protocol() {
   const [stimulus, setStimulus] = useState<PursuitModel | null>(null);
   const [clip, setClip] = useState<{ uri: string; size: number | null; summary: string; sidecar: Sidecar } | null>(null);
   const [upload, setUpload] = useState<{ state: "idle" | "uploading" | "done" | "error"; msg?: string }>({ state: "idle" });
-  const prevBrightness = useRef<number | null>(null);
 
   const uploadClip = async () => {
     if (!clip) return;
@@ -75,16 +75,15 @@ export default function Protocol() {
       const recPromise = camRef.current?.recordAsync({ maxDuration: 20 });
       logger.info("protocol", "capture.start", {});
 
-      // Flash START
-      await brightnessMax(prevBrightness);
+      // Flash START (luminosité déjà au max via useMaxBrightness)
       markers.push({ kind: "flash", edge: "start", scheduledMs: now(), durationMs: FLASH_MS });
       setFlashOn(true);
       await delay(FLASH_MS);
       setFlashOn(false);
-      await restoreBrightness(prevBrightness);
 
       // Stimulus de poursuite
       await delay(400);
+      logger.info("protocol", "seq.afterFlash1", {});
       const model: PursuitModel = {
         type: "smooth_pursuit_h",
         center: 0.5,
@@ -99,16 +98,16 @@ export default function Protocol() {
 
       // Flash END
       await delay(400);
-      await brightnessMax(prevBrightness);
       markers.push({ kind: "flash", edge: "end", scheduledMs: now(), durationMs: FLASH_MS });
       setFlashOn(true);
       await delay(FLASH_MS);
       setFlashOn(false);
-      await restoreBrightness(prevBrightness);
 
       // Stop + récupération
+      logger.info("protocol", "seq.stopping", {});
       camRef.current?.stopRecording();
       const result = await recPromise;
+      logger.info("protocol", "seq.recResolved", { uri: result?.uri ? "ok" : "empty" });
       if (!result?.uri) {
         logger.warn("protocol", "capture.empty", {});
         setPhase("idle");
@@ -151,7 +150,6 @@ export default function Protocol() {
       });
       setPhase("recorded");
     } catch (e) {
-      await restoreBrightness(prevBrightness);
       setFlashOn(false);
       setStimulus(null);
       logger.captureException(e, { where: "runProtocol" });
@@ -221,7 +219,7 @@ export default function Protocol() {
             <Pressable style={({ pressed }) => [styles.startBtn, pressed && styles.pressed]} onPress={runProtocol}>
               <Text style={styles.startText}>Lancer la capture guidée</Text>
             </Pressable>
-            <Text style={styles.hint}>2 flashs + suivez le point des yeux (~7s)</Text>
+            <Text style={styles.hint}>💡 Luminosité au MAX · suivez le point des yeux (~7s)</Text>
           </View>
         )}
       </View>

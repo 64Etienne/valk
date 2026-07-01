@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import Constants from "expo-constants";
 import * as Brightness from "expo-brightness";
 import { File } from "expo-file-system";
@@ -17,15 +18,25 @@ export function saveSidecar(clipUri: string, sidecar: Sidecar): string {
   return uri;
 }
 
-export async function brightnessMax(prev: { current: number | null }): Promise<void> {
-  prev.current = await Brightness.getBrightnessAsync().catch(() => null);
-  await Brightness.setBrightnessAsync(1).catch(() => {});
-}
-export async function restoreBrightness(prev: { current: number | null }): Promise<void> {
-  if (prev.current != null) {
-    await Brightness.setBrightnessAsync(prev.current).catch(() => {});
-    prev.current = null;
-  }
+// Luminosité au MAX pendant toute la durée de l'écran de capture, en fire-and-forget.
+// Pourquoi au montage (et pas juste avant le flash) : sur certaines versions iOS/Expo Go
+// `setBrightnessAsync` est lente/capricieuse ; en la lançant dès le montage, elle a plusieurs
+// secondes pour s'appliquer avant le flash (au lieu de 0 ms) → l'overlay blanc est réellement
+// lumineux → spike de luminance détectable. On n'attend JAMAIS la promesse (un hang gèlerait
+// la capture). Filet de sécurité : l'utilisateur met aussi sa luminosité au max manuellement.
+export function useMaxBrightness(): void {
+  useEffect(() => {
+    let prev: number | null = null;
+    Brightness.getBrightnessAsync()
+      .then((b) => {
+        prev = b;
+      })
+      .catch(() => {});
+    void Brightness.setBrightnessAsync(1).catch(() => {});
+    return () => {
+      if (prev != null) void Brightness.setBrightnessAsync(prev).catch(() => {});
+    };
+  }, []);
 }
 
 /** Upload multipart du clip + sidecar vers /api/captures (gaté). */

@@ -12,7 +12,7 @@ import {
   type SyncMarker,
 } from "@valk/shared";
 import { logger } from "../src/observability/logger";
-import { saveSidecar, brightnessMax, restoreBrightness, uploadCapture } from "../src/capture/helpers";
+import { saveSidecar, uploadCapture, useMaxBrightness } from "../src/capture/helpers";
 import { ClipPlayback } from "../src/capture/ClipPlayback";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
@@ -31,6 +31,7 @@ type Phase = "idle" | "running" | "recorded";
 
 export default function Calibration() {
   useKeepAwake();
+  useMaxBrightness();
   const router = useRouter();
   const [camPerm, requestCam] = useCameraPermissions();
   const [micPerm, requestMic] = useMicrophonePermissions();
@@ -40,7 +41,6 @@ export default function Calibration() {
   const [dotX, setDotX] = useState<number | null>(null);
   const [clip, setClip] = useState<{ uri: string; size: number | null; summary: string; sidecar: Sidecar } | null>(null);
   const [upload, setUpload] = useState<{ state: "idle" | "uploading" | "done" | "error"; msg?: string }>({ state: "idle" });
-  const prevBrightness = useRef<number | null>(null);
 
   const uploadClip = async () => {
     if (!clip) return;
@@ -58,14 +58,13 @@ export default function Calibration() {
     try {
       const recPromise = camRef.current?.recordAsync({ maxDuration: 30 });
       logger.info("calibration", "capture.start", {});
-      // FLASH start
-      await brightnessMax(prevBrightness);
+      // FLASH start (luminosité déjà au max via useMaxBrightness)
       markers.push({ kind: "flash", edge: "start", scheduledMs: now(), durationMs: FLASH_MS });
       setFlashOn(true);
       await delay(FLASH_MS);
       setFlashOn(false);
-      await restoreBrightness(prevBrightness);
       await delay(400);
+      logger.info("calibration", "seq.afterFlash1", {});
       // FIXATIONS
       const points: FixationModel["points"] = [];
       for (const x of XS) {
@@ -77,15 +76,15 @@ export default function Calibration() {
       setDotX(null);
       await delay(400);
       // FLASH end
-      await brightnessMax(prevBrightness);
       markers.push({ kind: "flash", edge: "end", scheduledMs: now(), durationMs: FLASH_MS });
       setFlashOn(true);
       await delay(FLASH_MS);
       setFlashOn(false);
-      await restoreBrightness(prevBrightness);
 
+      logger.info("calibration", "seq.stopping", {});
       camRef.current?.stopRecording();
       const result = await recPromise;
+      logger.info("calibration", "seq.recResolved", { uri: result?.uri ? "ok" : "empty" });
       if (!result?.uri) {
         setPhase("idle");
         return;
@@ -118,7 +117,6 @@ export default function Calibration() {
       });
       setPhase("recorded");
     } catch (e) {
-      await restoreBrightness(prevBrightness);
       setFlashOn(false);
       setDotX(null);
       logger.captureException(e, { where: "calibration.run" });
@@ -170,7 +168,7 @@ export default function Calibration() {
   return (
     <View style={styles.fill}>
       <CameraView ref={camRef} style={styles.fill} facing="front" mode="video" videoQuality="720p" />
-      {dotX != null && <View style={[styles.dot, { left: dotX * (SCREEN_W - DOT), top: SCREEN_H / 2 - DOT / 2 }]} />}
+      {dotX != null && <View style={[styles.dot, { left: dotX * (SCREEN_W - DOT), top: SCREEN_H * 0.16 }]} />}
       {flashOn && <View style={styles.flash} />}
       <View style={styles.overlay} pointerEvents="box-none">
         <View style={styles.topBar}>
@@ -184,7 +182,7 @@ export default function Calibration() {
             <Pressable style={({ pressed }) => [styles.startBtn, pressed && styles.pressed]} onPress={run}>
               <Text style={styles.startText}>Lancer la calibration</Text>
             </Pressable>
-            <Text style={styles.hint}>Fixe chaque point qui apparaît (~1,5 s), tête immobile</Text>
+            <Text style={styles.hint}>💡 Luminosité au MAX · fixe chaque point (~1,5 s), tête immobile</Text>
           </View>
         )}
       </View>
