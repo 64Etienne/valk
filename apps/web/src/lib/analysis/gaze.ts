@@ -82,6 +82,8 @@ export interface GazeSignal {
   facePct: number;
   signFlipped: boolean;
   status: "ok" | "gaze_unreliable" | "sync_unverified" | "failed";
+  /** Métriques B3 (gain calibré, lag, RMSE, saccades) — optionnel, rétro-compatible. */
+  metrics?: import("./metrics").PursuitMetrics;
 }
 
 const FACE_MIN_PCT = 60;

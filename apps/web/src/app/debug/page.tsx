@@ -147,6 +147,21 @@ export default async function DebugPage({
                         ▶ overlay
                       </a>
                     </div>
+                    {c.analysis.metrics && (
+                      <p className="mt-1 text-[11px] font-medium text-zinc-300">
+                        {c.analysis.metrics.gain != null
+                          ? `gain ${c.analysis.metrics.gain.toFixed(2)}`
+                          : "⚠ sans calibration"}
+                        {" · "}
+                        {c.analysis.metrics.lagMs >= 0
+                          ? `retard ${Math.round(c.analysis.metrics.lagMs)} ms`
+                          : `avance ${Math.round(-c.analysis.metrics.lagMs)} ms`}
+                        {c.analysis.metrics.rmse != null && ` · RMSE ${c.analysis.metrics.rmse.toFixed(3)}`}
+                        {` · ${c.analysis.metrics.saccades} saccades (${c.analysis.metrics.saccadesPerSec.toFixed(2)}/s)`}
+                        {c.analysis.metrics.calibrationR2 != null &&
+                          ` · calib R²=${c.analysis.metrics.calibrationR2.toFixed(2)}`}
+                      </p>
+                    )}
                   </div>
                 )}
                 {c.calibration && (
