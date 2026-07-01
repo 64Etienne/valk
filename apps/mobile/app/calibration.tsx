@@ -108,7 +108,6 @@ export default function Calibration() {
       sidecarSchema.parse(sidecar);
       saveSidecar(result.uri, sidecar);
       logger.info("calibration", "capture.done", { uri: result.uri, size, points: points.length });
-      setUpload({ state: "idle" });
       setClip({
         uri: result.uri,
         size,
@@ -116,6 +115,10 @@ export default function Calibration() {
         summary: `Calibration · ${points.length} points · ${size != null ? (size / 1048576).toFixed(1) + " Mo" : "—"}`,
       });
       setPhase("recorded");
+      // Envoi AUTOMATIQUE au serveur (le bouton « Envoyer » reste dispo en secours)
+      setUpload({ state: "uploading" });
+      const up = await uploadCapture(result.uri, sidecar);
+      setUpload({ state: up.ok ? "done" : "error", msg: up.detail });
     } catch (e) {
       setFlashOn(false);
       setDotX(null);
@@ -182,7 +185,7 @@ export default function Calibration() {
             <Pressable style={({ pressed }) => [styles.startBtn, pressed && styles.pressed]} onPress={run}>
               <Text style={styles.startText}>Lancer la calibration</Text>
             </Pressable>
-            <Text style={styles.hint}>💡 Luminosité au MAX · fixe chaque point (~1,5 s), tête immobile</Text>
+            <Text style={styles.hint}>Fixe chaque point qui apparaît (~1,5 s), tête immobile</Text>
           </View>
         )}
       </View>

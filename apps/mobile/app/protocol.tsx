@@ -139,7 +139,6 @@ export default function Protocol() {
         durMs,
         sidecarUri,
       });
-      setUpload({ state: "idle" });
       setClip({
         uri: result.uri,
         size,
@@ -149,6 +148,10 @@ export default function Protocol() {
         }`,
       });
       setPhase("recorded");
+      // Envoi AUTOMATIQUE au serveur (le bouton « Envoyer » reste dispo en secours)
+      setUpload({ state: "uploading" });
+      const up = await uploadCapture(result.uri, sidecar);
+      setUpload({ state: up.ok ? "done" : "error", msg: up.detail });
     } catch (e) {
       setFlashOn(false);
       setStimulus(null);
@@ -219,7 +222,7 @@ export default function Protocol() {
             <Pressable style={({ pressed }) => [styles.startBtn, pressed && styles.pressed]} onPress={runProtocol}>
               <Text style={styles.startText}>Lancer la capture guidée</Text>
             </Pressable>
-            <Text style={styles.hint}>💡 Luminosité au MAX · suivez le point des yeux (~7s)</Text>
+            <Text style={styles.hint}>Suivez le point des yeux (~7s), tête immobile</Text>
           </View>
         )}
       </View>

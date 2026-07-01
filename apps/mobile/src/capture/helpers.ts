@@ -32,8 +32,16 @@ export function useMaxBrightness(): void {
         prev = b;
       })
       .catch(() => {});
-    void Brightness.setBrightnessAsync(1).catch(() => {});
+    // Doc Expo : sur iOS setBrightnessAsync règle l'écran sans permission (l'effet natif
+    // s'applique même si la promesse hangue). On tire au montage + relance à 1 s (insurance
+    // contre un drop), jamais await. → luminosité au max automatiquement, sans geste manuel.
+    const setMax = () => {
+      void Brightness.setBrightnessAsync(1).catch(() => {});
+    };
+    setMax();
+    const t = setTimeout(setMax, 1000);
     return () => {
+      clearTimeout(t);
       if (prev != null) void Brightness.setBrightnessAsync(prev).catch(() => {});
     };
   }, []);
